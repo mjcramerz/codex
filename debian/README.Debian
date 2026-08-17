@@ -1,0 +1,10 @@
+codex for Debian
+
+This package ships the `codex` CLI binary built from the Rust workspace in
+`codex-rs/`.
+
+Runtime expectations:
+
+ - `git`, `ripgrep`, and `bubblewrap` are provided by Debian dependencies.
+ - upstream validation happens in CI through the shared GitLab delivery jobs;
+   the package build itself focuses on producing the Debian package artifacts.

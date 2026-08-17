@@ -1,0 +1,48 @@
+Source: codex
+Section: utils
+Priority: optional
+Maintainer: Matthew Cramer <mcramer@localhost>
+Build-Depends:
+ debhelper-compat (= 13),
+ build-essential,
+ cargo,
+ cmake,
+ libcap-dev,
+ libssl-dev,
+ libwayland-dev,
+ libx11-dev,
+ libxcb-randr0-dev,
+ libxcb-shape0-dev,
+ libxcb-xfixes0-dev,
+ libxcb1-dev,
+ libxkbcommon-dev,
+ libxrandr-dev,
+ nasm,
+ perl,
+ pkg-config,
+ quilt,
+ rustc,
+Standards-Version: 4.7.0
+Homepage: https://github.com/openai/codex
+Rules-Requires-Root: no
+#Vcs-Git: https://salsa.debian.org/debian/codex-rs.git
+#Vcs-Browser: https://salsa.debian.org/debian/codex-rs
+
+Package: codex
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ bubblewrap,
+ ca-certificates,
+ git,
+ ripgrep,
+Recommends:
+ zsh,
+Description: local coding agent CLI from OpenAI
+ Codex is a local coding assistant that runs from the terminal and works
+ directly against a checked out repository.
+ .
+ This Debian package installs the `codex` CLI and relies on system-provided
+ Git, ripgrep, and bubblewrap at runtime.

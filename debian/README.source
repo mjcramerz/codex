@@ -1,0 +1,22 @@
+codex for Debian
+
+This package uses the `3.0 (quilt)` source format.
+
+Shared CI now treats `debian/` as the packaging owner and uses the checked-in
+`debian/patches/` quilt queue as the canonical patch stack.
+
+The canonical package version for this pipeline is the top entry in
+`debian/changelog`.
+
+The source-package flow reconciles a disposable worktree at the selected base
+ref, pops the quilt stack to create the `.orig.tar.*`, reapplies the quilt
+stack, and runs `dpkg-buildpackage -S -sa -us -uc`.
+
+Binary `.deb` artifacts for Aptly are built from the generated `.dsc` with
+`sbuild`, so the package build uses the same Debian metadata inside a clean
+build environment.
+
+Shared GitLab CI now runs the generic source-package, binary-package, bundle,
+and publish helper logic from the shared delivery pipeline definitions, while
+this repository continues to own `debian/`, the quilt queue, and the release
+overlay inputs.

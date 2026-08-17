@@ -1,0 +1,10 @@
+diff --git a/codex-rs/ext/goal/src/lib.rs b/codex-rs/ext/goal/src/lib.rs
+index ccd091affce4646394f7c6e41f84b2153feb6654..a725e48bebbeecb18e67d2fe053bf673a62d6f9e 100644
+--- a/codex-rs/ext/goal/src/lib.rs
++++ b/codex-rs/ext/goal/src/lib.rs
+@@ -1,3 +1,5 @@
++#![recursion_limit = "256"]
++
+ //! Extension crate for the `/goal` feature.
+ 
+ mod accounting;

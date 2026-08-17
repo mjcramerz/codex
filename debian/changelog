@@ -1,0 +1,6 @@
+codex (0.142.0-1) unstable; urgency=medium
+
+  * Refresh Debian packaging for Bazel-backed GitLab builds and shared publish
+    helpers.
+
+ -- Matthew Cramer <mcramer@localhost>  Thu, 25 Jun 2026 11:25:15 +0000

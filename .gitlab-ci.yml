@@ -1,0 +1,54 @@
+stages:
+  - verify
+  - test
+  - build
+  - stage
+  - publish
+
+include:
+  - project: '${GL_CICD_SHARED_PROJ}'
+    ref: mcr/main
+    file: '/policy/jobs.yml'
+  - project: '${GL_CICD_SHARED_PROJ}'
+    ref: mcr/main
+    file: '/policy/build.yml'
+  - project: '${GL_CICD_SHARED_PROJ}'
+    ref: mcr/main
+    file: '/bws/common.yml'
+  - project: '${GL_CICD_SHARED_PROJ}'
+    ref: mcr/main
+    file: '/policy/publish.yml'
+    inputs:
+      publish_mode: 'aptly'
+
+default:
+  tags:
+    - $GLAB_RUNNER_TAG_HOST
+    - $GLAB_RUNNER_TAG_TYPE
+    - $GLAB_RUNNER_TAG_JOB
+
+variables:
+  GLAB_RUNNER_TAG_JOB: 'bazel'
+  GLAB_BUILD_IMAGE: '${GLAB_CI_BUILD_IMG}'
+  GLAB_PUBLISH_IMAGE: '${GLAB_CI_PUBLISH_IMG}'
+  DIST_DIR: 'codex-rs/target/dist'
+  CI_VERIFY_COMMAND: 'make verify'
+  CI_TEST_COMMAND: 'make test'
+  CI_BUILD_COMMAND: 'make build'
+  CI_STAGE_COMMAND: 'make stage'
+  CI_BAZEL_BUILD_LABEL: '//codex-rs/cli:codex_linux_x86_64_gnu'
+  CI_BAZEL_BUILD_OUTPUT_BIN: '${DIST_DIR}/build/codex'
+  CI_TEST_BOOTSTRAP_COMMAND: 'command -v cargo-nextest >/dev/null 2>&1 || cargo install --locked cargo-nextest'
+  CI_VERIFY_APT_PACKAGES: 'dpkg-dev git just perl python3 quilt'
+  CI_TEST_APT_PACKAGES: 'git just perl python3 quilt'
+  CI_BUILD_APT_PACKAGES: 'build-essential ca-certificates cargo cmake git just libssl-dev libwayland-dev libx11-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb1-dev libxkbcommon-dev libxrandr-dev nasm perl pkg-config python3 quilt rustc'
+  CI_STAGE_APT_PACKAGES: 'build-essential ca-certificates cargo cmake git libssl-dev libwayland-dev libx11-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb1-dev libxkbcommon-dev libxrandr-dev nasm perl pkg-config rustc'
+  DEBIAN_SOURCE_APT_PACKAGES: 'ca-certificates cargo debhelper devscripts dpkg-dev git make quilt rustc xz-utils'
+  GITLAB_BUNDLE_APT_PACKAGES: 'dpkg-dev'
+  GITLAB_UPLOAD_APT_PACKAGES: 'ca-certificates curl'
+  DEBIAN_SOURCE_FLAGS: '-S -sa -us -uc'
+  DEBIAN_SBUILD_FLAGS: '--no-run-lintian'
+  DEBIAN_SBUILD_ARCH: 'amd64'
+  DEBIAN_SBUILD_DISTRIBUTION: 'unstable'
+  DEBIAN_SBUILD_CHROOT_MODE: 'unshare'
+  APTLY_CHANNEL: 'testing'
