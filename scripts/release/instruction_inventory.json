@@ -410,21 +410,6 @@
       ]
     },
     {
-      "target": "tools/apply_patch.md",
-      "kind": "file",
-      "source": "codex-rs/prompts/templates/apply_patch_tool_instructions.md",
-      "config_bindings": [
-        {
-          "path": [
-            "instruction_overrides",
-            "tools",
-            "apply_patch_instructions_file"
-          ],
-          "kind": "file_path"
-        }
-      ]
-    },
-    {
       "target": "tui/init.md",
       "kind": "file",
       "source": "codex-rs/tui/prompt_for_init_command.md",
