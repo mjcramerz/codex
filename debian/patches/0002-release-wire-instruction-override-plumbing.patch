@@ -1,62 +1,53 @@
 diff --git a/codex-rs/core/Cargo.toml b/codex-rs/core/Cargo.toml
-index 4435a2eb630c382cfbfd6960253b6e2c7849ac97..436eda4b8d12f2995937e295ce46f401ecf41094 100644
+index ff683fb5f..4b50dd0f6 100644
 --- a/codex-rs/core/Cargo.toml
 +++ b/codex-rs/core/Cargo.toml
-@@ -76,6 +76,7 @@ codex-utils-plugins = { workspace = true }
+@@ -83,6 +83,7 @@ codex-utils-plugins = { workspace = true }
  codex-utils-pty = { workspace = true }
  codex-utils-string = { workspace = true }
  codex-utils-stream-parser = { workspace = true }
 +codex-utils-template = { workspace = true }
  codex-windows-sandbox = { package = "codex-windows-sandbox", path = "../windows-sandbox-rs" }
- csv = { workspace = true }
  dirs = { workspace = true }
+ dunce = { workspace = true }
 diff --git a/codex-rs/prompts/src/agents.rs b/codex-rs/prompts/src/agents.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..e716d5bf947e2fba6f43ec4c705f2abd21fc3343
+index 000000000..e716d5bf9
 --- /dev/null
 +++ b/codex-rs/prompts/src/agents.rs
 @@ -0,0 +1 @@
 +pub const HIERARCHICAL_AGENTS_MESSAGE: &str = include_str!("../templates/agents/hierarchical.md");
 diff --git a/codex-rs/prompts/src/lib.rs b/codex-rs/prompts/src/lib.rs
-index 5a30358393d8b81bd4525065021080df4f2cdcaf..7dc4d9d73efcabe7d60c9b641ba02978f697e76c 100644
+index ab297babc..8174e311d 100644
 --- a/codex-rs/prompts/src/lib.rs
 +++ b/codex-rs/prompts/src/lib.rs
 @@ -1,3 +1,4 @@
 +mod agents;
- mod apply_patch;
  mod compact;
  mod goals;
-@@ -6,12 +7,15 @@ mod realtime;
+ mod permissions_instructions;
+@@ -5,12 +6,15 @@ mod realtime;
  mod review_exit;
  mod review_request;
  
 +pub use agents::HIERARCHICAL_AGENTS_MESSAGE;
- pub use apply_patch::APPLY_PATCH_TOOL_INSTRUCTIONS;
  pub use compact::SUMMARIZATION_PROMPT;
  pub use compact::SUMMARY_PREFIX;
  pub use goals::budget_limit_prompt;
  pub use goals::continuation_prompt;
  pub use goals::objective_updated_prompt;
+ pub use permissions_instructions::ApprovalPromptContext;
 +pub use permissions_instructions::PermissionsInstructionFeatures;
 +pub use permissions_instructions::PermissionsInstructionOverrides;
  pub use permissions_instructions::PermissionsInstructions;
  pub use realtime::BACKEND_PROMPT;
  pub use realtime::END_INSTRUCTIONS;
 diff --git a/codex-rs/prompts/src/permissions_instructions.rs b/codex-rs/prompts/src/permissions_instructions.rs
-index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf569996bf 100644
+index 82f1ffc40..f1d5013af 100644
 --- a/codex-rs/prompts/src/permissions_instructions.rs
 +++ b/codex-rs/prompts/src/permissions_instructions.rs
-@@ -20,8 +20,6 @@ const APPROVAL_POLICY_UNLESS_TRUSTED: &str =
-     include_str!("../templates/permissions/approval_policy/unless_trusted.md");
- const APPROVAL_POLICY_ON_REQUEST_RULE: &str =
-     include_str!("../templates/permissions/approval_policy/on_request.md");
--const APPROVAL_POLICY_ON_REQUEST_AUTO_REVIEW: &str =
--    include_str!("../templates/permissions/approval_policy/on_request_auto_review.md");
- const APPROVAL_POLICY_ON_REQUEST_RULE_REQUEST_PERMISSION: &str =
-     include_str!("../templates/permissions/approval_policy/on_request_rule_request_permission.md");
- const AUTO_REVIEW_APPROVAL_SUFFIX: &str = "`approvals_reviewer` is `auto_review`: Sandbox escalations with require_escalated will be reviewed for compliance with the policy. If a rejection happens, you should proceed only with a materially safer alternative, or inform the user of the risk and send a final message to ask for approval.";
-@@ -54,6 +52,27 @@ struct PermissionsPromptConfig<'a> {
-     request_permissions_tool_enabled: bool,
+@@ -84,6 +84,27 @@ impl<'a> ApprovalPromptContext<'a> {
+     }
  }
  
 +#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -80,10 +71,10 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +    pub request_permissions_tool_enabled: bool,
 +}
 +
- #[derive(Debug, Clone, PartialEq)]
- /// Developer instructions that describe the active sandbox and approval policy.
- pub struct PermissionsInstructions {
-@@ -70,6 +89,29 @@ impl PermissionsInstructions {
+ impl PermissionsInstructions {
+     /// Builds permissions instructions from the effective permission profile and approval policy.
+     pub fn from_permission_profile(
+@@ -94,6 +115,29 @@ impl PermissionsInstructions {
          cwd: &Path,
          exec_permission_approvals_enabled: bool,
          request_permissions_tool_enabled: bool,
@@ -91,7 +82,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +        Self::from_permission_profile_with_overrides(
 +            permission_profile,
 +            approval_policy,
-+            approvals_reviewer,
++            approval_context,
 +            exec_policy,
 +            cwd,
 +            PermissionsInstructionFeatures {
@@ -105,7 +96,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +    pub fn from_permission_profile_with_overrides(
 +        permission_profile: &PermissionProfile,
 +        approval_policy: AskForApproval,
-+        approvals_reviewer: ApprovalsReviewer,
++        approval_context: ApprovalPromptContext<'_>,
 +        exec_policy: &Policy,
 +        cwd: &Path,
 +        features: PermissionsInstructionFeatures,
@@ -113,9 +104,9 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
      ) -> Self {
          let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
          let (sandbox_mode, writable_roots) =
-@@ -82,11 +124,12 @@ impl PermissionsInstructions {
-                 approval_policy,
-                 approvals_reviewer,
+@@ -108,11 +152,12 @@ impl PermissionsInstructions {
+                 approval_messages: approval_context.messages,
+                 permission_messages: approval_context.permission_messages,
                  exec_policy,
 -                exec_permission_approvals_enabled,
 -                request_permissions_tool_enabled,
@@ -128,7 +119,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
          )
      }
  
-@@ -107,6 +150,7 @@ impl PermissionsInstructions {
+@@ -133,6 +178,7 @@ impl PermissionsInstructions {
              config,
              writable_roots,
              /*denied_reads*/ None,
@@ -136,24 +127,30 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
          )
      }
  
-@@ -116,17 +160,22 @@ impl PermissionsInstructions {
+@@ -142,21 +188,28 @@ impl PermissionsInstructions {
          config: PermissionsPromptConfig<'_>,
          writable_roots: Option<Vec<WritableRoot>>,
          denied_reads: Option<String>,
 +        overrides: PermissionsInstructionOverrides<'_>,
      ) -> Self {
          let mut text = String::new();
--        append_section(&mut text, &sandbox_text(sandbox_mode, network_access));
+-        let sandbox = sandbox_text(sandbox_mode, network_access, config.permission_messages);
++        let sandbox = sandbox_text_with_overrides(
++            sandbox_mode,
++            network_access,
++            config.permission_messages,
++            overrides,
++        );
+         if !sandbox.is_empty() {
+             append_section(&mut text, &sandbox);
+         }
          append_section(
              &mut text,
 -            &approval_text(
-+            &sandbox_text_with_overrides(sandbox_mode, network_access, overrides),
-+        );
-+        append_section(
-+            &mut text,
 +            &approval_text_with_overrides(
                  config.approval_policy,
                  config.approvals_reviewer,
+                 config.approval_messages,
                  config.exec_policy,
                  config.exec_permission_approvals_enabled,
                  config.request_permissions_tool_enabled,
@@ -161,7 +158,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
              ),
          );
          if let Some(writable_roots) = writable_roots_text(writable_roots) {
-@@ -191,31 +240,60 @@ fn append_section(text: &mut String, section: &str) {
+@@ -221,6 +274,7 @@ fn append_section(text: &mut String, section: &str) {
      text.push_str(section);
  }
  
@@ -169,13 +166,15 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
  fn approval_text(
      approval_policy: AskForApproval,
      approvals_reviewer: ApprovalsReviewer,
-     exec_policy: &Policy,
+@@ -229,7 +283,41 @@ fn approval_text(
      exec_permission_approvals_enabled: bool,
      request_permissions_tool_enabled: bool,
-+) -> String {
+ ) -> String {
+-    if let Some(approval_messages) = approval_messages {
 +    approval_text_with_overrides(
 +        approval_policy,
 +        approvals_reviewer,
++        approval_messages,
 +        exec_policy,
 +        exec_permission_approvals_enabled,
 +        request_permissions_tool_enabled,
@@ -186,11 +185,44 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +fn approval_text_with_overrides(
 +    approval_policy: AskForApproval,
 +    approvals_reviewer: ApprovalsReviewer,
++    approval_messages: Option<&ApprovalMessages>,
 +    exec_policy: &Policy,
 +    exec_permission_approvals_enabled: bool,
 +    request_permissions_tool_enabled: bool,
 +    overrides: PermissionsInstructionOverrides<'_>,
- ) -> String {
++) -> String {
++    let policy_override = match &approval_policy {
++        AskForApproval::Never => overrides.approval_policy_never,
++        AskForApproval::UnlessTrusted => overrides.approval_policy_unless_trusted,
++        AskForApproval::OnRequest if exec_permission_approvals_enabled => {
++            overrides.approval_policy_on_request_rule_request_permission
++        }
++        AskForApproval::OnRequest => overrides
++            .approval_policy_on_request
++            .or(overrides.approval_policy_on_failure),
++        AskForApproval::Granular(_) => None,
++    };
++
++    if policy_override.is_none()
++        && let Some(approval_messages) = approval_messages
++    {
+         let selected = match &approval_policy {
+             AskForApproval::OnRequest => match approvals_reviewer {
+                 ApprovalsReviewer::User => approval_messages.on_request.as_ref(),
+@@ -240,26 +328,44 @@ fn approval_text(
+             AskForApproval::Granular(_) => None,
+         };
+         if let Some(selected) = selected {
++            if approvals_reviewer == ApprovalsReviewer::AutoReview
++                && approval_policy != AskForApproval::Never
++                && let Some(suffix) = overrides.auto_review_approval_suffix
++            {
++                return format!("{selected}\n\n{suffix}");
++            }
+             return selected.clone();
+         }
+     }
+ 
      let with_request_permissions_tool = |text: &str| {
          if request_permissions_tool_enabled {
 -            format!("{text}\n\n{}", request_permissions_tool_prompt_section())
@@ -205,8 +237,6 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
      let on_request_instructions = || {
          let on_request_rule = if exec_permission_approvals_enabled {
 -            APPROVAL_POLICY_ON_REQUEST_RULE_REQUEST_PERMISSION.to_string()
--        } else if approvals_reviewer == ApprovalsReviewer::AutoReview {
--            APPROVAL_POLICY_ON_REQUEST_AUTO_REVIEW.to_string()
 +            overrides
 +                .approval_policy_on_request_rule_request_permission
 +                .unwrap_or(APPROVAL_POLICY_ON_REQUEST_RULE_REQUEST_PERMISSION)
@@ -228,7 +258,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
          }
          if let Some(prefixes) = approved_command_prefixes_text(exec_policy) {
              sections.push(format!(
-@@ -225,33 +303,67 @@ fn approval_text(
+@@ -269,33 +375,73 @@ fn approval_text(
          sections.join("\n\n")
      };
      let text = match approval_policy {
@@ -272,14 +302,15 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
  }
  
 +#[cfg(test)]
- fn sandbox_text(mode: SandboxMode, network_access: NetworkAccess) -> String {
--    let template = match mode {
--        SandboxMode::DangerFullAccess => &*SANDBOX_MODE_DANGER_FULL_ACCESS_TEMPLATE,
--        SandboxMode::WorkspaceWrite => &*SANDBOX_MODE_WORKSPACE_WRITE_TEMPLATE,
--        SandboxMode::ReadOnly => &*SANDBOX_MODE_READ_ONLY_TEMPLATE,
+ fn sandbox_text(
+     mode: SandboxMode,
+     network_access: NetworkAccess,
+     permission_messages: Option<&PermissionMessages>,
+ ) -> String {
 +    sandbox_text_with_overrides(
 +        mode,
 +        network_access,
++        permission_messages,
 +        PermissionsInstructionOverrides::default(),
 +    )
 +}
@@ -287,6 +318,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +fn sandbox_text_with_overrides(
 +    mode: SandboxMode,
 +    network_access: NetworkAccess,
++    permission_messages: Option<&PermissionMessages>,
 +    overrides: PermissionsInstructionOverrides<'_>,
 +) -> String {
 +    let override_source = match mode {
@@ -294,19 +326,19 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
 +        SandboxMode::WorkspaceWrite => overrides.sandbox_mode_workspace_write,
 +        SandboxMode::ReadOnly => overrides.sandbox_mode_read_only,
 +    };
-+    let parsed_override = override_source.map(|source| {
-+        Template::parse(source.trim_end())
-+            .unwrap_or_else(|err| panic!("sandbox override template must parse: {err}"))
-+    });
-+    let template = match (mode, parsed_override.as_ref()) {
-+        (_, Some(template)) => template,
-+        (SandboxMode::DangerFullAccess, None) => &*SANDBOX_MODE_DANGER_FULL_ACCESS_TEMPLATE,
-+        (SandboxMode::WorkspaceWrite, None) => &*SANDBOX_MODE_WORKSPACE_WRITE_TEMPLATE,
-+        (SandboxMode::ReadOnly, None) => &*SANDBOX_MODE_READ_ONLY_TEMPLATE,
-     };
-     let network_access = network_access.to_string();
-     template
-@@ -312,11 +424,46 @@ fn request_permissions_tool_prompt_section() -> &'static str {
++    if let Some(source) = override_source {
++        let template = Template::parse(source.trim_end())
++            .unwrap_or_else(|err| panic!("sandbox override template must parse: {err}"));
++        let network_access = network_access.to_string();
++        return template
++            .render([("network_access", network_access.as_str())])
++            .unwrap_or_else(|err| panic!("sandbox override template must render: {err}"));
++    }
++
+     let selected = permission_messages.and_then(|messages| match mode {
+         SandboxMode::DangerFullAccess => messages.danger_full_access.as_deref(),
+         SandboxMode::WorkspaceWrite => messages.workspace_write.as_deref(),
+@@ -373,11 +519,46 @@ fn request_permissions_tool_prompt_section() -> &'static str {
      "# request_permissions Tool\n\nThe built-in `request_permissions` tool is available in this session. Invoke it when you need to request additional `network` or `file_system` permissions before later shell-like commands need them. Request only the specific permissions required for the task."
  }
  
@@ -353,7 +385,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
  ) -> String {
      let sandbox_approval_prompts_allowed = granular_config.allows_sandbox_approval();
      let shell_permission_requests_available =
-@@ -352,7 +499,7 @@ fn granular_instructions(
+@@ -413,7 +594,7 @@ fn granular_instructions(
          .map(|&(_, category)| format!("- {category}"))
          .collect::<Vec<_>>();
  
@@ -362,7 +394,7 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
  
      if !prompted_categories.is_empty() {
          sections.push(format!(
-@@ -368,11 +515,17 @@ fn granular_instructions(
+@@ -429,11 +610,17 @@ fn granular_instructions(
      }
  
      if shell_permission_requests_available {
@@ -383,119 +415,26 @@ index 090254705e0e9d3dd84014a2de4aa9a5292ad24d..7d52c9c6719eb42c540ef26e0405a8bf
  
      if let Some(prefixes) = approved_command_prefixes_text(exec_policy) {
 diff --git a/codex-rs/prompts/src/permissions_instructions_tests.rs b/codex-rs/prompts/src/permissions_instructions_tests.rs
-index 8250aea57d44ba8c449d20af6101a807725b509b..2b45fe25f1729b8920606b368aa2664f7acb05c5 100644
+index b558f2a98..7edb4f433 100644
 --- a/codex-rs/prompts/src/permissions_instructions_tests.rs
 +++ b/codex-rs/prompts/src/permissions_instructions_tests.rs
-@@ -237,98 +237,17 @@ fn on_request_includes_tool_guidance_alongside_inline_permission_guidance_when_b
- 
- #[test]
- fn auto_review_approvals_append_auto_review_specific_guidance() {
--    let mut exec_policy = Policy::empty();
--    exec_policy
--        .add_prefix_rule(&["git".to_string(), "pull".to_string()], Decision::Allow)
--        .expect("add rule");
-     let text = approval_text(
-         AskForApproval::OnRequest,
-         ApprovalsReviewer::AutoReview,
--        &exec_policy,
--        /*exec_permission_approvals_enabled*/ false,
--        /*request_permissions_tool_enabled*/ false,
--    );
--
--    assert!(text.contains("`approvals_reviewer` is `auto_review`"));
--    assert!(text.contains("materially safer alternative"));
--    assert!(!text.contains("`approvals_reviewer` is `guardian_subagent`"));
--    assert!(text.contains(
--        "When the sandbox is likely to block a command needed for the task, request escalation up front"
--    ));
--    assert!(text.contains(
--        "When unsure, prefer requesting escalation unnecessarily over failing to request it when needed"
--    ));
--    assert!(
--        text.contains(
--            "Request escalation for commands that need write access outside writable roots"
--        )
--    );
--    assert!(text.contains(
--        "Request escalation for git operations that may write lock files, such as updating the index or refs"
--    ));
--    assert!(!text.contains("Request escalation for GUI commands"));
--    assert!(!text.contains("Use escalation when it is the direct or most reliable way"));
--    assert!(!text.contains("Do not spend extra turns running likely-to-fail sandbox probes first"));
--    assert!(text.contains("Do not include a `prefix_rule` parameter."));
--    assert!(text.contains(
--        "Request escalation for commands that may need network access, including HTTP calls, package registries, internal services, data-service APIs, remote queries, data fetches, or live probes"
--    ));
--    assert!(text.contains(
--        "Request escalation for commands that may need remote authentication, cluster, cloud, or database access"
--    ));
--    assert!(text.contains(
--        "Request escalation for commands that may need process, cache, or other environment access outside the sandbox"
--    ));
--    assert!(
--        text.contains(
--            "including DNS, connection, authentication, retry, or service endpoint errors"
--        )
--    );
--    assert!(text.contains(
--        "Request escalation before potentially destructive actions, such as `rm` or `git reset`"
--    ));
--    assert!(text.contains(
--        "If a command may be hanging on sandbox-blocked access, stop after a short timeout and rerun with `require_escalated`"
--    ));
--    assert!(!text.contains("Be judicious with escalating"));
--    assert!(text.contains("Approved command prefixes"));
--    assert!(text.contains(r#"["git", "pull"]"#));
--    assert!(!text.contains("prefix_rule guidance"));
--}
--
--#[test]
--fn normal_on_request_keeps_user_approval_wording() {
--    let text = approval_text(
--        AskForApproval::OnRequest,
--        ApprovalsReviewer::User,
-         &Policy::empty(),
-         /*exec_permission_approvals_enabled*/ false,
-         /*request_permissions_tool_enabled*/ false,
-     );
- 
--    assert!(text.contains("approved by the user"));
--    assert!(text.contains("Be judicious with escalating"));
--    assert!(!text.contains(
--        "When the sandbox is likely to block a command needed for the task, request escalation up front"
--    ));
--}
--
--#[test]
--fn auto_review_on_request_with_inline_permission_requests_keeps_suffix() {
--    let text = approval_text(
--        AskForApproval::OnRequest,
--        ApprovalsReviewer::AutoReview,
--        &Policy::empty(),
--        /*exec_permission_approvals_enabled*/ true,
--        /*request_permissions_tool_enabled*/ false,
--    );
--
--    assert!(text.contains("with_additional_permissions"));
-     assert!(text.contains("`approvals_reviewer` is `auto_review`"));
-+    assert!(!text.contains("`approvals_reviewer` is `guardian_subagent`"));
-     assert!(text.contains("materially safer alternative"));
--    assert!(!text.contains(
--        "When the sandbox is likely to block a command needed for the task, request escalation up front"
--    ));
- }
- 
- #[test]
-@@ -530,3 +449,30 @@ fn granular_policy_lists_request_permissions_category_without_tool_section_when_
+@@ -750,3 +750,37 @@ fn granular_policy_lists_request_permissions_category_without_tool_section_when_
      assert!(!text.contains("- `request_permissions`"));
      assert!(!text.contains("# request_permissions Tool"));
  }
 +
 +#[test]
 +fn permission_overrides_replace_selected_fragments() {
++    let catalog_messages = ApprovalMessages {
++        on_request: Some("catalog request rule".to_string()),
++        on_request_auto_review: Some("catalog auto-review rule".to_string()),
++        never: None,
++        unless_trusted: None,
++    };
 +    let text = approval_text_with_overrides(
 +        AskForApproval::OnRequest,
 +        ApprovalsReviewer::AutoReview,
++        Some(&catalog_messages),
 +        &Policy::empty(),
 +        /*exec_permission_approvals_enabled*/ true,
 +        /*request_permissions_tool_enabled*/ true,
@@ -519,7 +458,7 @@ index 8250aea57d44ba8c449d20af6101a807725b509b..2b45fe25f1729b8920606b368aa2664f
 +}
 diff --git a/codex-rs/prompts/templates/agents/hierarchical.md b/codex-rs/prompts/templates/agents/hierarchical.md
 new file mode 100644
-index 0000000000000000000000000000000000000000..c10be098a8f10c686e903ea0e02526343acdc283
+index 000000000..c10be098a
 --- /dev/null
 +++ b/codex-rs/prompts/templates/agents/hierarchical.md
 @@ -0,0 +1,22 @@

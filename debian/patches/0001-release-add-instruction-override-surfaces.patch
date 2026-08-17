@@ -1,8 +1,8 @@
 diff --git a/codex-rs/app-server/src/request_processors.rs b/codex-rs/app-server/src/request_processors.rs
-index 587325c246dd471a81e26fb5c7f47361647c6b4c..3ea42f2547e43b6fc989c2f6aaedc0ef95c4772d 100644
+index 0929e2629..99ef691a0 100644
 --- a/codex-rs/app-server/src/request_processors.rs
 +++ b/codex-rs/app-server/src/request_processors.rs
-@@ -392,7 +392,6 @@ use codex_mcp::read_mcp_resource as read_mcp_resource_without_thread;
+@@ -423,7 +423,6 @@ use codex_mcp::read_mcp_resource as read_mcp_resource_without_thread;
  use codex_mcp::resolve_oauth_scopes;
  use codex_memories_write::clear_memory_roots_contents;
  use codex_model_provider::create_model_provider;
@@ -10,7 +10,7 @@ index 587325c246dd471a81e26fb5c7f47361647c6b4c..3ea42f2547e43b6fc989c2f6aaedc0ef
  use codex_protocol::ThreadId;
  use codex_protocol::config_types::CollaborationMode;
  use codex_protocol::config_types::ForcedLoginMethod;
-@@ -566,7 +565,8 @@ fn resolve_turn_environment_selections(
+@@ -610,7 +609,8 @@ fn resolve_turn_environment_selections(
          let environment_id = environment.environment_id;
          let cwd = environment
              .cwd
@@ -21,17 +21,18 @@ index 587325c246dd471a81e26fb5c7f47361647c6b4c..3ea42f2547e43b6fc989c2f6aaedc0ef
                  invalid_request(format!(
                      "invalid cwd for environment `{environment_id}`: path `{}` does not use absolute POSIX or Windows path syntax",
 diff --git a/codex-rs/app-server/src/request_processors/catalog_processor.rs b/codex-rs/app-server/src/request_processors/catalog_processor.rs
-index 95423402003dd275e0361ff7deab30a9647ed899..1c0b38e319e509985c28f6de5d0dc377f030ff27 100644
+index 1598ec48e..de34453a5 100644
 --- a/codex-rs/app-server/src/request_processors/catalog_processor.rs
 +++ b/codex-rs/app-server/src/request_processors/catalog_processor.rs
-@@ -1,5 +1,6 @@
+@@ -1,6 +1,7 @@
  use super::*;
  use codex_core::config::permission_profile_catalog;
+ use codex_hooks::HookListEntryHandler;
 +use codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets_with_overrides;
  use futures::StreamExt;
  
  #[derive(Clone)]
-@@ -184,7 +185,7 @@ impl CatalogRequestProcessor {
+@@ -205,7 +206,7 @@ impl CatalogRequestProcessor {
          &self,
          params: CollaborationModeListParams,
      ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
@@ -40,7 +41,7 @@ index 95423402003dd275e0361ff7deab30a9647ed899..1c0b38e319e509985c28f6de5d0dc377
              .await
              .map(|response| Some(response.into()))
      }
-@@ -293,15 +294,23 @@ impl CatalogRequestProcessor {
+@@ -320,15 +321,23 @@ impl CatalogRequestProcessor {
      }
  
      async fn list_collaboration_modes(
@@ -71,10 +72,10 @@ index 95423402003dd275e0361ff7deab30a9647ed899..1c0b38e319e509985c28f6de5d0dc377
          Ok(response)
      }
 diff --git a/codex-rs/app-server/src/request_processors/turn_processor.rs b/codex-rs/app-server/src/request_processors/turn_processor.rs
-index bb074e457ba4cd3e41514074b16974fdc86ec19c..f511c29424946209d32c50932746a6e8c0ef5f8f 100644
+index 08de04ffb..b0694da4c 100644
 --- a/codex-rs/app-server/src/request_processors/turn_processor.rs
 +++ b/codex-rs/app-server/src/request_processors/turn_processor.rs
-@@ -338,11 +338,20 @@ impl TurnRequestProcessor {
+@@ -359,11 +359,20 @@ impl TurnRequestProcessor {
          mut collaboration_mode: CollaborationMode,
      ) -> CollaborationMode {
          if collaboration_mode.settings.developer_instructions.is_none()
@@ -101,7 +102,7 @@ index bb074e457ba4cd3e41514074b16974fdc86ec19c..f511c29424946209d32c50932746a6e8
              collaboration_mode.settings.developer_instructions = Some(instructions);
          }
 diff --git a/codex-rs/collaboration-mode-templates/templates/default.md b/codex-rs/collaboration-mode-templates/templates/default.md
-index 715982c396bb53b42e8165e613d0d5f1376f9b3d..e0d01bdbd4c2dd410490b4d8099e8bb837114b85 100644
+index 715982c39..e0d01bdbd 100644
 --- a/codex-rs/collaboration-mode-templates/templates/default.md
 +++ b/codex-rs/collaboration-mode-templates/templates/default.md
 @@ -6,6 +6,13 @@ Your active mode changes only when new developer instructions with a different `
@@ -121,7 +122,7 @@ index 715982c396bb53b42e8165e613d0d5f1376f9b3d..e0d01bdbd4c2dd410490b4d8099e8bb8
 +rather than writing a multiple choice question as a textual assistant message.
 +Never write a multiple choice question as a textual assistant message.
 diff --git a/codex-rs/collaboration-mode-templates/templates/plan.md b/codex-rs/collaboration-mode-templates/templates/plan.md
-index ca68f41c897db9eec0fb484659b0be59cb92d238..3e111bb1a307ae060c5a14cd0fb9f054bc3b42bb 100644
+index ca68f41c8..3e111bb1a 100644
 --- a/codex-rs/collaboration-mode-templates/templates/plan.md
 +++ b/codex-rs/collaboration-mode-templates/templates/plan.md
 @@ -27,11 +27,24 @@ Actions that gather truth, reduce ambiguity, or validate feasibility without cha
@@ -174,10 +175,10 @@ index ca68f41c897db9eec0fb484659b0be59cb92d238..3e111bb1a307ae060c5a14cd0fb9f054
  * A clear title
  * A brief summary section
 diff --git a/codex-rs/config/src/config_toml.rs b/codex-rs/config/src/config_toml.rs
-index 823d59c0bc50c4c7af5148a224b383794da75c8b..2dfde499866ac2422f450c2002851799f03c7f07 100644
+index 20d64d21b..218581ba4 100644
 --- a/codex-rs/config/src/config_toml.rs
 +++ b/codex-rs/config/src/config_toml.rs
-@@ -13,6 +13,7 @@ use crate::types::AppsConfigToml;
+@@ -14,6 +14,7 @@ use crate::types::AppsConfigToml;
  use crate::types::AuthCredentialsStoreMode;
  use crate::types::FeedbackConfigToml;
  use crate::types::History;
@@ -185,7 +186,7 @@ index 823d59c0bc50c4c7af5148a224b383794da75c8b..2dfde499866ac2422f450c2002851799
  use crate::types::MarketplaceConfig;
  use crate::types::McpServerConfig;
  use crate::types::MemoriesToml;
-@@ -240,6 +241,11 @@ pub struct ConfigToml {
+@@ -238,6 +239,11 @@ pub struct ConfigToml {
      /// sanctioned by Codex will likely degrade model performance.
      pub model_instructions_file: Option<AbsolutePathBuf>,
  
@@ -198,10 +199,10 @@ index 823d59c0bc50c4c7af5148a224b383794da75c8b..2dfde499866ac2422f450c2002851799
      pub compact_prompt: Option<String>,
  
 diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
-index 5303fccd43b632d71224d3caad97e35931115d64..643ba37d3b9daf6bb7f7d195ff14444067980846 100644
+index c78ed6986..626d21bba 100644
 --- a/codex-rs/config/src/types.rs
 +++ b/codex-rs/config/src/types.rs
-@@ -277,6 +277,90 @@ pub struct ToolSuggestConfig {
+@@ -284,6 +284,90 @@ pub struct ToolSuggestConfig {
      pub disabled_tools: Vec<ToolSuggestDisabledTool>,
  }
  
@@ -293,11 +294,11 @@ index 5303fccd43b632d71224d3caad97e35931115d64..643ba37d3b9daf6bb7f7d195ff144440
  #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
  #[schemars(deny_unknown_fields)]
 diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
-index c344475541962adf8effc57bd07d40718a7f97c4..cd221216bdf3165e833eaeb65cf7d925c87a985a 100644
+index b32181c98..0aafb1f5a 100644
 --- a/codex-rs/core/src/config/config_tests.rs
 +++ b/codex-rs/core/src/config/config_tests.rs
-@@ -321,6 +321,157 @@ consolidation_model = "gpt-5.2"
-     );
+@@ -352,6 +352,157 @@ async fn goal_max_token_budget_requires_positive_integer() {
+     }
  }
  
 +#[tokio::test]
@@ -456,7 +457,7 @@ index c344475541962adf8effc57bd07d40718a7f97c4..cd221216bdf3165e833eaeb65cf7d925
      let cfg: ConfigToml = toml::from_str(
 diff --git a/codex-rs/core/src/config/instruction_overrides.rs b/codex-rs/core/src/config/instruction_overrides.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..bce3ed68b5ac8101633a22dcaa62583520a37aee
+index 000000000..bce3ed68b
 --- /dev/null
 +++ b/codex-rs/core/src/config/instruction_overrides.rs
 @@ -0,0 +1,287 @@
@@ -748,7 +749,7 @@ index 0000000000000000000000000000000000000000..bce3ed68b5ac8101633a22dcaa625835
 +    Config::try_read_non_empty_file(fs, path, context).await
 +}
 diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
-index d90d010102d5d011e505233147ba564ee1fd2415..a2d5b74b9113ea0c9950cb75b3bc03b21c8d46a5 100644
+index 2361fea0c..d523aaa8f 100644
 --- a/codex-rs/core/src/config/mod.rs
 +++ b/codex-rs/core/src/config/mod.rs
 @@ -1,5 +1,7 @@
@@ -756,10 +757,10 @@ index d90d010102d5d011e505233147ba564ee1fd2415..a2d5b74b9113ea0c9950cb75b3bc03b2
  use crate::config::edit::ConfigEditsBuilder;
 +use crate::config::instruction_overrides::InstructionOverrides;
 +use crate::config::instruction_overrides::load_instruction_overrides;
+ use crate::guardian::BUNDLED_GUARDIAN_POLICY;
  use crate::path_utils::normalize_for_native_workdir;
  use crate::unified_exec::DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS;
- use crate::unified_exec::MIN_EMPTY_YIELD_TIME_MS;
-@@ -144,6 +146,7 @@ use toml_edit::DocumentMut;
+@@ -152,6 +154,7 @@ use toml_edit::DocumentMut;
  pub(crate) mod agent_roles;
  mod auth_keyring;
  pub mod edit;
@@ -767,7 +768,7 @@ index d90d010102d5d011e505233147ba564ee1fd2415..a2d5b74b9113ea0c9950cb75b3bc03b2
  mod managed_features;
  mod network_proxy_spec;
  mod otel;
-@@ -678,6 +681,9 @@ pub struct Config {
+@@ -631,6 +634,9 @@ pub struct Config {
      /// Developer instructions override injected as a separate message.
      pub developer_instructions: Option<String>,
  
@@ -777,7 +778,7 @@ index d90d010102d5d011e505233147ba564ee1fd2415..a2d5b74b9113ea0c9950cb75b3bc03b2
      /// Guardian-specific policy config override from requirements.toml or config.toml.
      /// This is inserted into the fixed guardian prompt template under the
      /// `# Policy Configuration` section rather than replacing the whole
-@@ -3572,6 +3578,9 @@ impl Config {
+@@ -3771,6 +3777,9 @@ impl Config {
              }
          });
  
@@ -787,125 +788,86 @@ index d90d010102d5d011e505233147ba564ee1fd2415..a2d5b74b9113ea0c9950cb75b3bc03b2
          // Load base instructions override from a file if specified. If the
          // path is relative, resolve it against the effective cwd so the
          // behaviour matches other path-like config values.
-@@ -3584,6 +3593,7 @@ impl Config {
+@@ -3783,6 +3792,7 @@ impl Config {
          .await?;
          let base_instructions = base_instructions
              .or(file_base_instructions)
 +            .or_else(|| instruction_overrides.model_base_instructions.clone())
              .or(cfg.instructions.clone());
-         let developer_instructions = developer_instructions.or(cfg.developer_instructions);
-         let include_permissions_instructions = cfg.include_permissions_instructions.unwrap_or(true);
-@@ -3786,6 +3796,7 @@ impl Config {
-             base_instructions,
+         let base_instructions_provenance = base_instructions
+             .as_ref()
+@@ -3996,6 +4006,7 @@ impl Config {
+             base_instructions_provenance,
              personality,
              developer_instructions,
 +            instruction_overrides,
              compact_prompt,
              include_permissions_instructions,
              include_apps_instructions,
-diff --git a/codex-rs/core/src/context_manager/updates.rs b/codex-rs/core/src/context_manager/updates.rs
-index 5e81bc2a7d1183bd079c5337b0a8fd131963d4fd..cc15f871bb7f435a81288610a3b2e31b1d75df11 100644
---- a/codex-rs/core/src/context_manager/updates.rs
-+++ b/codex-rs/core/src/context_manager/updates.rs
-@@ -1,3 +1,4 @@
-+use crate::config::Config;
- use crate::context::CollaborationModeInstructions;
+diff --git a/codex-rs/core/src/context/world_state/permissions.rs b/codex-rs/core/src/context/world_state/permissions.rs
+index 00a690fc6..8a2fb5f87 100644
+--- a/codex-rs/core/src/context/world_state/permissions.rs
++++ b/codex-rs/core/src/context/world_state/permissions.rs
+@@ -6,6 +6,8 @@ use crate::context::ApprovedCommandPrefixSaved;
  use crate::context::ContextualUserFragment;
- use crate::context::ModelSwitchInstructions;
-@@ -11,6 +12,7 @@ use crate::session::PreviousTurnSettings;
- use crate::session::turn_context::TurnContext;
+ use crate::context::PermissionsInstructions;
  use codex_execpolicy::Policy;
- use codex_features::Feature;
 +use codex_prompts::PermissionsInstructionFeatures;
- use codex_protocol::config_types::MultiAgentMode;
- use codex_protocol::config_types::Personality;
- use codex_protocol::models::ContentItem;
-@@ -35,19 +37,27 @@ fn build_permissions_update_item(
-     }
- 
-     Some(
--        PermissionsInstructions::from_permission_profile(
-+        PermissionsInstructions::from_permission_profile_with_overrides(
-             &next.permission_profile,
-             next.approval_policy.value(),
-             next.config.approvals_reviewer,
-             exec_policy,
-             #[allow(deprecated)]
-             &next.cwd,
-+            PermissionsInstructionFeatures {
-+                exec_permission_approvals_enabled: next
-+                    .config
-+                    .features
-+                    .enabled(Feature::ExecPermissionApprovals),
-+                request_permissions_tool_enabled: next
-+                    .config
-+                    .features
-+                    .enabled(Feature::RequestPermissionsTool),
-+            },
-             next.config
--                .features
--                .enabled(Feature::ExecPermissionApprovals),
--            next.config
--                .features
--                .enabled(Feature::RequestPermissionsTool),
-+                .instruction_overrides
-+                .permissions
-+                .as_prompt_overrides(),
-         )
-         .render(),
++use codex_prompts::PermissionsInstructionOverrides;
+ use codex_protocol::models::PermissionProfile;
+ use codex_protocol::models::format_allow_prefixes;
+ use codex_protocol::protocol::AskForApproval;
+@@ -40,16 +42,20 @@ impl PermissionsState {
+         cwd: &Path,
+         exec_permission_approvals_enabled: bool,
+         request_permissions_tool_enabled: bool,
++        overrides: PermissionsInstructionOverrides<'_>,
+     ) -> Self {
+         let build_instructions = |exec_policy| {
+-            PermissionsInstructions::from_permission_profile(
++            PermissionsInstructions::from_permission_profile_with_overrides(
+                 permission_profile,
+                 approval_policy,
+                 approval_context,
+                 exec_policy,
+                 cwd,
+-                exec_permission_approvals_enabled,
+-                request_permissions_tool_enabled,
++                PermissionsInstructionFeatures {
++                    exec_permission_approvals_enabled,
++                    request_permissions_tool_enabled,
++                },
++                overrides,
+             )
+         };
+         let instructions = build_instructions(exec_policy);
+diff --git a/codex-rs/core/src/context/world_state/permissions_tests.rs b/codex-rs/core/src/context/world_state/permissions_tests.rs
+index 3f76ed934..66fcd9c7e 100644
+--- a/codex-rs/core/src/context/world_state/permissions_tests.rs
++++ b/codex-rs/core/src/context/world_state/permissions_tests.rs
+@@ -233,6 +233,7 @@ fn permissions_state(
+         Path::new("/workspace"),
+         /*exec_permission_approvals_enabled*/ false,
+         /*request_permissions_tool_enabled*/ false,
++        PermissionsInstructionOverrides::default(),
      )
-@@ -150,7 +160,8 @@ fn build_personality_update_item(
-         && next.personality != previous.personality
-     {
-         let model_info = &next.model_info;
--        let personality_message = personality_message_for(model_info, personality);
-+        let personality_message =
-+            personality_message_for(next.config.as_ref(), model_info, personality);
-         personality_message.map(|message| PersonalitySpecInstructions::new(message).render())
-     } else {
-         None
-@@ -158,9 +169,23 @@ fn build_personality_update_item(
  }
  
- pub(crate) fn personality_message_for(
-+    config: &Config,
-     model_info: &ModelInfo,
-     personality: Personality,
- ) -> Option<String> {
-+    if let Some(template) = config
-+        .instruction_overrides
-+        .custom_personality_instructions
-+        .as_deref()
-+    {
-+        let personality_label = match personality {
-+            Personality::None => "none",
-+            Personality::Friendly => "friendly",
-+            Personality::Pragmatic => "pragmatic",
-+        };
-+        return Some(template.replace("{{ personality }}", personality_label));
-+    }
-+
-     model_info
-         .model_messages
-         .as_ref()
-@@ -176,6 +201,9 @@ pub(crate) fn build_model_instructions_update_item(
-     if previous_turn_settings.model == next.model_info.slug {
-         return None;
-     }
-+    if next.config.base_instructions.is_some() {
-+        return None;
-+    }
- 
-     let model_instructions = next.model_info.get_model_instructions(next.personality);
-     if model_instructions.is_empty() {
+@@ -249,5 +250,6 @@ fn permissions_state_with_default_messages(exec_policy: &Policy) -> PermissionsS
+         Path::new("/workspace"),
+         /*exec_permission_approvals_enabled*/ false,
+         /*request_permissions_tool_enabled*/ false,
++        PermissionsInstructionOverrides::default(),
+     )
+ }
 diff --git a/codex-rs/core/src/lib.rs b/codex-rs/core/src/lib.rs
-index e9b749fea949075f5bdb4bc61c64a877c6dafce4..dc0aaedd19ed737d2e40abf2003e4b76a353c342 100644
+index e8335a448..e8d646bfb 100644
 --- a/codex-rs/core/src/lib.rs
 +++ b/codex-rs/core/src/lib.rs
-@@ -108,7 +108,7 @@ pub use client::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
+@@ -100,7 +100,7 @@ pub mod windows_sandbox;
+ pub use client::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
  pub use codex_protocol::config_types::ModelProviderAuthInfo;
  mod event_mapping;
- pub mod review_format;
 -pub use codex_prompts as review_prompts;
 +pub mod review_prompts;
  mod thread_manager;
@@ -913,7 +875,7 @@ index e9b749fea949075f5bdb4bc61c64a877c6dafce4..dc0aaedd19ed737d2e40abf2003e4b76
  pub(crate) mod windows_sandbox_read_grants;
 diff --git a/codex-rs/core/src/review_prompts.rs b/codex-rs/core/src/review_prompts.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ce71f99534a0d35e1fa03fe9476179b6f627f1e
+index 000000000..8ce71f995
 --- /dev/null
 +++ b/codex-rs/core/src/review_prompts.rs
 @@ -0,0 +1,159 @@
@@ -1077,11 +1039,11 @@ index 0000000000000000000000000000000000000000..8ce71f99534a0d35e1fa03fe9476179b
 +    }
 +}
 diff --git a/codex-rs/core/src/session/handlers.rs b/codex-rs/core/src/session/handlers.rs
-index a483ce5e0f7591407ce313d11ec675be1bd80373..25ee3bd68fa87a62a7d3ac5cee5bb2946ee55623 100644
+index a928090cc..a9e339dd5 100644
 --- a/codex-rs/core/src/session/handlers.rs
 +++ b/codex-rs/core/src/session/handlers.rs
-@@ -675,7 +675,11 @@ pub async fn review(
-     sess.refresh_mcp_servers_if_requested(&turn_context, Some(sess.mcp_elicitation_reviewer()))
+@@ -488,7 +488,11 @@ pub async fn review(
+     sess.maybe_emit_model_warnings_for_turn(turn_context.as_ref())
          .await;
      #[allow(deprecated)]
 -    match resolve_review_request(review_request, &turn_context.cwd) {
@@ -1093,56 +1055,83 @@ index a483ce5e0f7591407ce313d11ec675be1bd80373..25ee3bd68fa87a62a7d3ac5cee5bb294
          Ok(resolved) => {
              spawn_review_thread(
                  Arc::clone(sess),
-diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
-index f45616eed824bd53ec326b9be53982883862e473..f4b8a47528738360c7cae7892bcfa315ef93eda6 100644
---- a/codex-rs/core/src/session/mod.rs
-+++ b/codex-rs/core/src/session/mod.rs
-@@ -3176,21 +3176,28 @@ impl Session {
-         }
-         if turn_context.config.include_permissions_instructions {
-             developer_sections.push(
--                PermissionsInstructions::from_permission_profile(
-+                PermissionsInstructions::from_permission_profile_with_overrides(
-                     &turn_context.permission_profile,
-                     turn_context.approval_policy.value(),
-                     turn_context.config.approvals_reviewer,
-                     self.services.exec_policy.current().as_ref(),
-                     #[allow(deprecated)]
-                     &turn_context.cwd,
-+                    codex_prompts::PermissionsInstructionFeatures {
-+                        exec_permission_approvals_enabled: turn_context
-+                            .config
-+                            .features
-+                            .enabled(Feature::ExecPermissionApprovals),
-+                        request_permissions_tool_enabled: turn_context
-+                            .config
-+                            .features
-+                            .enabled(Feature::RequestPermissionsTool),
-+                    },
-                     turn_context
-                         .config
--                        .features
--                        .enabled(Feature::ExecPermissionApprovals),
--                    turn_context
--                        .config
--                        .features
--                        .enabled(Feature::RequestPermissionsTool),
-+                        .instruction_overrides
-+                        .permissions
-+                        .as_prompt_overrides(),
-                 )
-                 .render(),
-             );
-@@ -3228,6 +3235,7 @@ impl Session {
-             if !has_baked_personality
-                 && let Some(personality_message) =
-                     crate::context_manager::updates::personality_message_for(
-+                        turn_context.config.as_ref(),
-                         &model_info,
-                         personality,
-                     )
+diff --git a/codex-rs/core/src/session/tests.rs b/codex-rs/core/src/session/tests.rs
+index 3005aae73..e4662f183 100644
+--- a/codex-rs/core/src/session/tests.rs
++++ b/codex-rs/core/src/session/tests.rs
+@@ -6665,7 +6665,7 @@ async fn request_permissions_tool_resolves_relative_paths_against_selected_envir
+         ));
+ 
+     let call_id = "call-1".to_string();
+-    let handler = RequestPermissionsHandler;
++    let handler = RequestPermissionsHandler::default();
+     let tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
+     let step_context = StepContext::for_test(Arc::clone(&turn_context));
+     let handle = tokio::spawn({
+@@ -6753,7 +6753,7 @@ async fn request_permissions_tool_rejects_unknown_environment_id() {
+     let (session, turn_context) = make_session_and_context().await;
+     let turn_context = Arc::new(turn_context);
+     let step_context = StepContext::for_test(Arc::clone(&turn_context));
+-    let result = RequestPermissionsHandler
++    let result = RequestPermissionsHandler::default()
+         .handle(ToolInvocation {
+             session: Arc::new(session),
+             step_context,
+diff --git a/codex-rs/core/src/session/world_state.rs b/codex-rs/core/src/session/world_state.rs
+index 532a925fd..b9e8eed9a 100644
+--- a/codex-rs/core/src/session/world_state.rs
++++ b/codex-rs/core/src/session/world_state.rs
+@@ -78,16 +78,29 @@ impl Session {
+         world_state.add_section(ModelInstructionsState::new(
+             &turn_context.model_info.slug,
+             previous_model.as_deref(),
+-            model_instructions,
++            if turn_context.config.base_instructions.is_some() {
++                String::new()
++            } else {
++                model_instructions
++            },
+         ));
+         if self.features.enabled(Feature::Personality) {
+             let personality_instructions = turn_context.personality.and_then(|personality| {
+-                turn_context
+-                    .model_info
+-                    .model_messages
+-                    .as_ref()
+-                    .and_then(|messages| messages.get_personality_message(Some(personality)))
+-                    .filter(|message| !message.is_empty())
++                if let Some(template) = turn_context
++                    .config
++                    .instruction_overrides
++                    .custom_personality_instructions
++                    .as_deref()
++                {
++                    Some(template.replace("{{ personality }}", &personality.to_string()))
++                } else {
++                    turn_context
++                        .model_info
++                        .model_messages
++                        .as_ref()
++                        .and_then(|messages| messages.get_personality_message(Some(personality)))
++                        .filter(|message| !message.is_empty())
++                }
+             });
+             world_state.add_section(PersonalityState::new(
+                 &turn_context.model_info.slug,
+@@ -184,6 +197,11 @@ impl Session {
+                     .config
+                     .features
+                     .enabled(Feature::RequestPermissionsTool),
++                turn_context
++                    .config
++                    .instruction_overrides
++                    .permissions
++                    .as_prompt_overrides(),
+             ));
+         } else {
+             world_state.add_section(CompactPermissionsState::new(exec_policy.as_ref()));
 diff --git a/codex-rs/core/src/tasks/review.rs b/codex-rs/core/src/tasks/review.rs
-index 19ac0fdc35e537af275caa8e611714af55d42d57..f8fdc3be1b141eb9cfd249fa427ecdc18931a9f9 100644
+index 94859375d..55c913479 100644
 --- a/codex-rs/core/src/tasks/review.rs
 +++ b/codex-rs/core/src/tasks/review.rs
 @@ -1,7 +1,5 @@
@@ -1150,9 +1139,9 @@ index 19ac0fdc35e537af275caa8e611714af55d42d57..f8fdc3be1b141eb9cfd249fa427ecdc1
  
 -use codex_prompts::render_review_exit_interrupted;
 -use codex_prompts::render_review_exit_success;
+ use codex_protocol::ResponseItemId;
  use codex_protocol::config_types::WebSearchMode;
- use codex_protocol::items::TurnItem;
- use codex_protocol::models::ContentItem;
+ use codex_protocol::items::ExitedReviewModeItem;
 @@ -114,7 +112,8 @@ async fn start_review_conversation(
      let _ = sub_agent_config.features.disable(Feature::MultiAgentV2);
  
@@ -1160,10 +1149,10 @@ index 19ac0fdc35e537af275caa8e611714af55d42d57..f8fdc3be1b141eb9cfd249fa427ecdc1
 -    sub_agent_config.base_instructions = Some(crate::REVIEW_PROMPT.to_string());
 +    sub_agent_config.base_instructions =
 +        Some(crate::review_prompts::review_rubric(config.as_ref()));
+     sub_agent_config.base_instructions_provenance = Some(BaseInstructionsProvenance::Custom);
      sub_agent_config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
  
-     let model = config
-@@ -229,11 +228,12 @@ pub(crate) async fn exit_review_mode(
+@@ -222,11 +221,12 @@ pub(crate) async fn exit_review_mode(
              let block = format_review_findings_block(&out.findings, /*selection*/ None);
              findings_str.push_str(&format!("\n{block}"));
          }
@@ -1179,10 +1168,10 @@ index 19ac0fdc35e537af275caa8e611714af55d42d57..f8fdc3be1b141eb9cfd249fa427ecdc1
              "Review was interrupted. Please re-run /review and wait for it to complete."
                  .to_string();
 diff --git a/codex-rs/core/src/tools/handlers/apply_patch.rs b/codex-rs/core/src/tools/handlers/apply_patch.rs
-index 6326dbc1adf2d6684c4197954cb0a1a217f8c038..2e0a4f48f70b53186d473a0fc5615d5632fefc35 100644
+index 36ae51ba7..c7ceaab2e 100644
 --- a/codex-rs/core/src/tools/handlers/apply_patch.rs
 +++ b/codex-rs/core/src/tools/handlers/apply_patch.rs
-@@ -60,11 +60,15 @@ const APPLY_PATCH_ARGUMENT_DIFF_BUFFER_INTERVAL: Duration = Duration::from_milli
+@@ -74,11 +74,15 @@ fn apply_patch_file_update_mode(turn: &TurnContext) -> ApplyPatchFileUpdateMode
  #[derive(Default)]
  pub struct ApplyPatchHandler {
      multi_environment: bool,
@@ -1200,7 +1189,7 @@ index 6326dbc1adf2d6684c4197954cb0a1a217f8c038..2e0a4f48f70b53186d473a0fc5615d56
      }
  }
  
-@@ -332,7 +336,7 @@ impl ToolExecutor<ToolInvocation> for ApplyPatchHandler {
+@@ -348,7 +352,7 @@ impl ToolExecutor<ToolInvocation> for ApplyPatchHandler {
      }
  
      fn spec(&self) -> ToolSpec {
@@ -1210,7 +1199,7 @@ index 6326dbc1adf2d6684c4197954cb0a1a217f8c038..2e0a4f48f70b53186d473a0fc5615d56
  
      fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
 diff --git a/codex-rs/core/src/tools/handlers/apply_patch_spec.rs b/codex-rs/core/src/tools/handlers/apply_patch_spec.rs
-index 358f045db1fd2836d54a1c8f33dd31f7efa1cf59..f74729cfb68cdcf0be09beb2e03d54cf4eb27e3b 100644
+index 39956d208..995d7ea50 100644
 --- a/codex-rs/core/src/tools/handlers/apply_patch_spec.rs
 +++ b/codex-rs/core/src/tools/handlers/apply_patch_spec.rs
 @@ -6,7 +6,10 @@ const APPLY_PATCH_LARK_GRAMMAR: &str = include_str!("apply_patch.lark");
@@ -1229,15 +1218,15 @@ index 358f045db1fd2836d54a1c8f33dd31f7efa1cf59..f74729cfb68cdcf0be09beb2e03d54cf
      };
      ToolSpec::Freeform(FreeformTool {
          name: "apply_patch".to_string(),
--        description: "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.".to_string(),
+-        description: "The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.".to_string(),
 +        description: description_override.unwrap_or_else(|| {
-+            "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.".to_string()
++            "The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.".to_string()
 +        }),
+         defer_loading: None,
          format: FreeformToolFormat {
              r#type: "grammar".to_string(),
-             syntax: "lark".to_string(),
 diff --git a/codex-rs/core/src/tools/handlers/apply_patch_spec_tests.rs b/codex-rs/core/src/tools/handlers/apply_patch_spec_tests.rs
-index 7d172becaeca768ad39fa2a74abfddce41421897..aa8b62c76e75bc884ea2aa03b8ff753d7f3215ae 100644
+index 6ea5ec715..d4b4e4116 100644
 --- a/codex-rs/core/src/tools/handlers/apply_patch_spec_tests.rs
 +++ b/codex-rs/core/src/tools/handlers/apply_patch_spec_tests.rs
 @@ -4,7 +4,10 @@ use pretty_assertions::assert_eq;
@@ -1252,7 +1241,7 @@ index 7d172becaeca768ad39fa2a74abfddce41421897..aa8b62c76e75bc884ea2aa03b8ff753d
          ToolSpec::Freeform(FreeformTool {
              name: "apply_patch".to_string(),
              description:
-@@ -21,9 +24,9 @@ fn create_apply_patch_freeform_tool_matches_expected_spec() {
+@@ -22,9 +25,9 @@ fn create_apply_patch_freeform_tool_matches_expected_spec() {
  
  #[test]
  fn create_apply_patch_freeform_tool_includes_environment_id_when_requested() {
@@ -1266,7 +1255,7 @@ index 7d172becaeca768ad39fa2a74abfddce41421897..aa8b62c76e75bc884ea2aa03b8ff753d
      };
  
 diff --git a/codex-rs/core/src/tools/handlers/request_permissions.rs b/codex-rs/core/src/tools/handlers/request_permissions.rs
-index 9fcb1c642c1bfc3e60bb4210c12d56eb550f239d..1d2e40ba00ac2d99fd661d0042219301c62d0c00 100644
+index 4d66985cb..9277d42b5 100644
 --- a/codex-rs/core/src/tools/handlers/request_permissions.rs
 +++ b/codex-rs/core/src/tools/handlers/request_permissions.rs
 @@ -17,7 +17,10 @@ use codex_tools::ToolName;
@@ -1294,7 +1283,7 @@ index 9fcb1c642c1bfc3e60bb4210c12d56eb550f239d..1d2e40ba00ac2d99fd661d0042219301
      }
  
      fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-@@ -121,3 +128,7 @@ impl RequestPermissionsHandler {
+@@ -120,3 +127,7 @@ impl RequestPermissionsHandler {
  }
  
  impl CoreToolRuntime for RequestPermissionsHandler {}
@@ -1304,7 +1293,7 @@ index 9fcb1c642c1bfc3e60bb4210c12d56eb550f239d..1d2e40ba00ac2d99fd661d0042219301
 +mod tests;
 diff --git a/codex-rs/core/src/tools/handlers/request_permissions_tests.rs b/codex-rs/core/src/tools/handlers/request_permissions_tests.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..9028e2c7d753cc57e5cfdde9118001174661a825
+index 000000000..9028e2c7d
 --- /dev/null
 +++ b/codex-rs/core/src/tools/handlers/request_permissions_tests.rs
 @@ -0,0 +1,15 @@
@@ -1324,10 +1313,10 @@ index 0000000000000000000000000000000000000000..9028e2c7d753cc57e5cfdde911800117
 +    );
 +}
 diff --git a/codex-rs/core/src/tools/handlers/request_user_input.rs b/codex-rs/core/src/tools/handlers/request_user_input.rs
-index 4f26865a6879964be9a56101c75b6ee135c9f5c7..6fe132317e690d61c46ae73c3911ddceb2b58b11 100644
+index 92e36fc66..a84588aef 100644
 --- a/codex-rs/core/src/tools/handlers/request_user_input.rs
 +++ b/codex-rs/core/src/tools/handlers/request_user_input.rs
-@@ -18,6 +18,7 @@ use codex_tools::ToolSpec;
+@@ -19,6 +19,7 @@ use codex_tools::ToolSpec;
  
  pub struct RequestUserInputHandler {
      pub available_modes: Vec<ModeKind>,
@@ -1335,7 +1324,7 @@ index 4f26865a6879964be9a56101c75b6ee135c9f5c7..6fe132317e690d61c46ae73c3911ddce
  }
  
  impl ToolExecutor<ToolInvocation> for RequestUserInputHandler {
-@@ -26,7 +27,11 @@ impl ToolExecutor<ToolInvocation> for RequestUserInputHandler {
+@@ -27,7 +28,11 @@ impl ToolExecutor<ToolInvocation> for RequestUserInputHandler {
      }
  
      fn spec(&self) -> ToolSpec {
@@ -1349,10 +1338,10 @@ index 4f26865a6879964be9a56101c75b6ee135c9f5c7..6fe132317e690d61c46ae73c3911ddce
  
      fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
 diff --git a/codex-rs/core/src/tools/handlers/request_user_input_tests.rs b/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
-index efea95e9cb798e4ea3011132e165476d09c744d9..fdc1ba0c98e5b2f3d9da9d2816589ab56e54ba13 100644
+index ce213e392..ffbd3616a 100644
 --- a/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
 +++ b/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
-@@ -26,6 +26,7 @@ async fn multi_agent_v2_request_user_input_rejects_subagent_threads() {
+@@ -31,6 +31,7 @@ async fn multi_agent_v2_request_user_input_rejects_subagent_threads() {
  
      let result = RequestUserInputHandler {
          available_modes: Vec::new(),
@@ -1360,147 +1349,250 @@ index efea95e9cb798e4ea3011132e165476d09c744d9..fdc1ba0c98e5b2f3d9da9d2816589ab5
      }
      .handle(ToolInvocation {
          session: Arc::new(session),
+@@ -86,6 +87,7 @@ async fn request_user_input_sets_non_blocking_outside_plan_mode() {
+         async move {
+             RequestUserInputHandler {
+                 available_modes: vec![ModeKind::Default],
++                description_override: None,
+             }
+             .handle(ToolInvocation {
+                 session,
+@@ -157,6 +159,7 @@ async fn request_user_input_sets_blocking_from_turn_mode() {
+         async move {
+             RequestUserInputHandler {
+                 available_modes: vec![ModeKind::Plan],
++                description_override: None,
+             }
+             .handle(ToolInvocation {
+                 session,
 diff --git a/codex-rs/core/src/tools/handlers/tool_search.rs b/codex-rs/core/src/tools/handlers/tool_search.rs
-index 272da2f226cb5077466bb9a4505cd3ffc05d8a44..bf28c397926d79b82cab476cec31010f2fecd757 100644
+index 15c2292c7..2b040593c 100644
 --- a/codex-rs/core/src/tools/handlers/tool_search.rs
 +++ b/codex-rs/core/src/tools/handlers/tool_search.rs
-@@ -26,6 +26,7 @@ pub struct ToolSearchHandler {
+@@ -28,6 +28,7 @@ use tracing::instrument;
+ pub struct ToolSearchHandler {
      search_infos: Vec<ToolSearchInfo>,
+     source_listing: ToolSearchSourceListing,
++    description_override: Option<String>,
      spec: ToolSpec,
      search_engine: SearchEngine<usize>,
-+    description_override: Option<String>,
  }
- 
- #[derive(Default)]
-@@ -35,20 +36,26 @@ pub(crate) struct ToolSearchHandlerCache {
- 
- impl ToolSearchHandlerCache {
-     #[instrument(level = "trace", skip_all, fields(search_info_count = search_infos.len()))]
--    pub(crate) fn get_or_build(&self, search_infos: Vec<ToolSearchInfo>) -> Arc<ToolSearchHandler> {
-+    pub(crate) fn get_or_build(
-+        &self,
-+        search_infos: Vec<ToolSearchInfo>,
+@@ -53,6 +54,7 @@ impl ToolSearchHandlerCache {
+         &self,
+         registry: &ToolRegistry,
+         source_listing: ToolSearchSourceListing,
 +        description_override: Option<String>,
-+    ) -> Arc<ToolSearchHandler> {
-         {
+     ) -> Arc<ToolSearchHandler> {
+         let sources = registry
+             .entries()
+@@ -73,6 +75,7 @@ impl ToolSearchHandlerCache {
              let cached = self.cached();
              if let Some(cached) = cached.as_ref()
-                 && cached.search_infos == search_infos
-+                && cached.description_override == description_override
+                 && cached.handler.source_listing == source_listing
++                && cached.handler.description_override == description_override
+                 && Self::sources_match(&cached.sources, &sources)
              {
-                 return Arc::clone(cached);
-             }
-         }
+                 return Arc::clone(&cached.handler);
+@@ -89,10 +92,15 @@ impl ToolSearchHandlerCache {
+             })
+             .collect();
  
--        let handler = Arc::new(ToolSearchHandler::new(search_infos));
-+        let handler = Arc::new(ToolSearchHandler::new(search_infos, description_override));
+-        let handler = Arc::new(ToolSearchHandler::new(search_infos, source_listing));
++        let handler = Arc::new(ToolSearchHandler::new(
++            search_infos,
++            source_listing,
++            description_override,
++        ));
          let mut cached = self.cached();
          if let Some(cached) = cached.as_ref()
-             && cached.search_infos == handler.search_infos
-+            && cached.description_override == handler.description_override
+             && cached.handler.source_listing == source_listing
++            && cached.handler.description_override == handler.description_override
+             && Self::sources_match(&cached.sources, &sources)
          {
-             return Arc::clone(cached);
-         }
-@@ -71,12 +78,19 @@ impl ToolSearchHandler {
-         skip_all,
-         fields(search_info_count = search_infos.len())
-     )]
--    pub(crate) fn new(search_infos: Vec<ToolSearchInfo>) -> Self {
-+    pub(crate) fn new(
-+        search_infos: Vec<ToolSearchInfo>,
+             return Arc::clone(&cached.handler);
+@@ -138,6 +146,7 @@ impl ToolSearchHandler {
+     pub(crate) fn new(
+         search_infos: Vec<ToolSearchInfo>,
+         source_listing: ToolSearchSourceListing,
 +        description_override: Option<String>,
-+    ) -> Self {
+     ) -> Self {
          let search_source_infos = search_infos
              .iter()
-             .filter_map(|search_info| search_info.source_info.clone())
-             .collect::<Vec<_>>();
--        let spec = create_tool_search_tool(&search_source_infos, TOOL_SEARCH_DEFAULT_LIMIT);
-+        let spec = create_tool_search_tool(
-+            &search_source_infos,
-+            TOOL_SEARCH_DEFAULT_LIMIT,
+@@ -147,6 +156,7 @@ impl ToolSearchHandler {
+             &search_source_infos,
+             TOOL_SEARCH_DEFAULT_LIMIT,
+             source_listing,
 +            description_override.clone(),
-+        );
+         );
          let documents: Vec<Document<usize>> = search_infos
              .iter()
-             .map(|search_info| search_info.entry.search_text.clone())
-@@ -90,6 +104,7 @@ impl ToolSearchHandler {
+@@ -160,6 +170,7 @@ impl ToolSearchHandler {
+         Self {
              search_infos,
+             source_listing,
++            description_override,
              spec,
              search_engine,
-+            description_override,
          }
-     }
- }
-@@ -205,8 +220,8 @@ mod tests {
-                 .expect("MCP handler should return search info"),
-         ];
+@@ -278,11 +289,23 @@ mod tests {
+         let mut registry = ToolRegistry::default();
+         registry.register_trusted_with_exposure(Arc::clone(&runtime), ToolExposure::Deferred);
  
--        let first = cache.get_or_build(search_infos.clone());
--        let second = cache.get_or_build(search_infos.clone());
-+        let first = cache.get_or_build(search_infos.clone(), /*description_override*/ None);
-+        let second = cache.get_or_build(search_infos.clone(), /*description_override*/ None);
+-        let first = cache.get_or_build(&registry, ToolSearchSourceListing::Include);
+-        let second = cache.get_or_build(&registry, ToolSearchSourceListing::Include);
++        let first = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
++        let second = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
          assert!(Arc::ptr_eq(&first, &second));
  
-         let mut changed_search_infos = search_infos;
-@@ -214,7 +229,7 @@ mod tests {
-             .entry
-             .search_text
-             .push_str(" changed");
--        let changed = cache.get_or_build(changed_search_infos);
-+        let changed = cache.get_or_build(changed_search_infos, /*description_override*/ None);
-         assert!(!Arc::ptr_eq(&first, &changed));
-     }
+-        let without_sources = cache.get_or_build(&registry, ToolSearchSourceListing::Omit);
++        let without_sources = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&first, &without_sources));
  
-@@ -257,7 +272,7 @@ mod tests {
+         let mut replacement_registry = ToolRegistry::default();
+@@ -291,12 +314,20 @@ mod tests {
+                 .expect("replacement MCP tool should convert"),
+         );
+         replacement_registry.register_trusted_with_exposure(replacement, ToolExposure::Deferred);
+-        let replacement = cache.get_or_build(&replacement_registry, ToolSearchSourceListing::Omit);
++        let replacement = cache.get_or_build(
++            &replacement_registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&without_sources, &replacement));
+ 
+         let mut disabled_registry = ToolRegistry::default();
+         disabled_registry.register_trusted_with_exposure(runtime, ToolExposure::Direct);
+-        let disabled = cache.get_or_build(&disabled_registry, ToolSearchSourceListing::Omit);
++        let disabled = cache.get_or_build(
++            &disabled_registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&replacement, &disabled));
+         assert!(disabled.search_infos.is_empty());
+     }
+@@ -322,7 +353,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let first = cache.get_or_build(&first_registry, ToolSearchSourceListing::Include);
++        let first = cache.get_or_build(
++            &first_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+ 
+         let mut equivalent_registry = ToolRegistry::default();
+         equivalent_registry
+@@ -331,7 +366,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let equivalent = cache.get_or_build(&equivalent_registry, ToolSearchSourceListing::Include);
++        let equivalent = cache.get_or_build(
++            &equivalent_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         assert!(Arc::ptr_eq(&first, &equivalent));
+ 
+         dynamic_tool.description = "Search refreshed records".to_string();
+@@ -341,7 +380,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let refreshed = cache.get_or_build(&refreshed_registry, ToolSearchSourceListing::Include);
++        let refreshed = cache.get_or_build(
++            &refreshed_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&first, &refreshed));
+         assert!(
+             refreshed.search_infos[1]
+@@ -390,7 +433,11 @@ mod tests {
                  .search_info()
                  .expect("dynamic handler should return search info")
          }));
--        let handler = ToolSearchHandler::new(search_infos);
-+        let handler = ToolSearchHandler::new(search_infos, /*description_override*/ None);
+-        let handler = ToolSearchHandler::new(search_infos, ToolSearchSourceListing::Include);
++        let handler = ToolSearchHandler::new(
++            search_infos,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
          let results = [
              &handler.search_infos[0].entry,
              &handler.search_infos[2].entry,
 diff --git a/codex-rs/core/src/tools/handlers/tool_search_spec.rs b/codex-rs/core/src/tools/handlers/tool_search_spec.rs
-index 2d17d131c74ed3f7a6a7b1534a6c38ef9ea5fc72..7139b845586965eeda719bad078b5805337056e2 100644
+index c607ae076..f529972aa 100644
 --- a/codex-rs/core/src/tools/handlers/tool_search_spec.rs
 +++ b/codex-rs/core/src/tools/handlers/tool_search_spec.rs
-@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
- pub(crate) fn create_tool_search_tool(
+@@ -17,6 +17,7 @@ pub(crate) fn create_tool_search_tool(
      searchable_sources: &[ToolSearchSourceInfo],
      default_limit: usize,
+     source_listing: ToolSearchSourceListing,
 +    description_override: Option<String>,
  ) -> ToolSpec {
      let properties = BTreeMap::from([
          (
-@@ -46,9 +47,11 @@ pub(crate) fn create_tool_search_tool(
-             .join("\n")
+@@ -90,9 +91,11 @@ pub(crate) fn create_tool_search_tool(
+         ToolSearchSourceListing::Omit => "\n\n".to_string(),
      };
  
 -    let description = format!(
--        "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.\n\nYou have access to tools from the following sources:\n{source_descriptions}\nSome of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
+-        "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.{source_section}Some of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
 -    );
 +    let description = description_override.unwrap_or_else(|| {
 +        format!(
-+            "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.\n\nYou have access to tools from the following sources:\n{source_descriptions}\nSome of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
++            "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.{source_section}Some of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
 +        )
 +    });
  
      ToolSpec::ToolSearch {
          execution: "client".to_string(),
-@@ -90,6 +93,7 @@ mod tests {
-                     },
+@@ -135,6 +138,7 @@ mod tests {
                  ],
                  /*default_limit*/ 8,
-+                /*description_override*/ None,
+                 ToolSearchSourceListing::Include,
++            /*description_override*/ None,
              ),
              ToolSpec::ToolSearch {
                  execution: "client".to_string(),
+@@ -165,6 +169,7 @@ mod tests {
+             }],
+             /*default_limit*/ 8,
+             ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
+         ) else {
+             panic!("expected tool search spec");
+         };
+@@ -187,6 +192,7 @@ mod tests {
+             &sources,
+             /*default_limit*/ 8,
+             ToolSearchSourceListing::Include,
++            /*description_override*/ None,
+         ) else {
+             panic!("expected tool search spec");
+         };
 diff --git a/codex-rs/core/src/tools/spec_plan.rs b/codex-rs/core/src/tools/spec_plan.rs
-index 8ca5eec898ff3b15433d805108ceb5f2022293c1..716f0733da584bb9fc7fbd2dadb1e6125e9be14a 100644
+index 3da01c002..258cd88dd 100644
 --- a/codex-rs/core/src/tools/spec_plan.rs
 +++ b/codex-rs/core/src/tools/spec_plan.rs
-@@ -720,13 +720,25 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
-         planned_tools.add_with_exposure(
+@@ -1056,13 +1056,25 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
+         registry.add_with_exposure(
              RequestUserInputHandler {
                  available_modes: request_user_input_available_modes(features),
 +                description_override: turn_context
@@ -1514,8 +1606,8 @@ index 8ca5eec898ff3b15433d805108ceb5f2022293c1..716f0733da584bb9fc7fbd2dadb1e612
      }
  
      if environment_mode.has_environment() && features.enabled(Feature::RequestPermissionsTool) {
--        planned_tools.add(RequestPermissionsHandler);
-+        planned_tools.add(RequestPermissionsHandler {
+-        registry.add(RequestPermissionsHandler);
++        registry.add(RequestPermissionsHandler {
 +            description_override: turn_context
 +                .config
 +                .instruction_overrides
@@ -1526,12 +1618,12 @@ index 8ca5eec898ff3b15433d805108ceb5f2022293c1..716f0733da584bb9fc7fbd2dadb1e612
      }
  
      if features.enabled(Feature::TokenBudget) {
-@@ -765,7 +777,14 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
+@@ -1101,7 +1113,14 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
      if environment_mode.has_environment() && turn_context.model_info.apply_patch_tool_type.is_some()
      {
          let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
--        planned_tools.add(ApplyPatchHandler::new(include_environment_id));
-+        planned_tools.add(ApplyPatchHandler::new(
+-        registry.add(ApplyPatchHandler::new(include_environment_id));
++        registry.add(ApplyPatchHandler::new(
 +            include_environment_id,
 +            turn_context
 +                .config
@@ -1542,24 +1634,25 @@ index 8ca5eec898ff3b15433d805108ceb5f2022293c1..716f0733da584bb9fc7fbd2dadb1e612
      }
  
      if turn_context
-@@ -980,7 +999,14 @@ fn append_tool_search_executor(
-         return;
-     }
- 
--    let handler: PlannedRuntime = context.tool_search_handler_cache.get_or_build(search_infos);
-+    let handler: PlannedRuntime = context.tool_search_handler_cache.get_or_build(
-+        search_infos,
+@@ -1265,7 +1284,15 @@ fn append_tool_search_executor(
+     } else {
+         ToolSearchSourceListing::Include
+     };
+-    let handler = tool_search_handler_cache.get_or_build(registry, source_listing);
++    let handler = tool_search_handler_cache.get_or_build(
++        registry,
++        source_listing,
 +        turn_context
 +            .config
 +            .instruction_overrides
 +            .search_tool_instructions
 +            .clone(),
 +    );
-     planned_tools.add_arc(handler);
+     registry.register_trusted(handler);
  }
  
 diff --git a/codex-rs/models-manager/src/collaboration_mode_presets.rs b/codex-rs/models-manager/src/collaboration_mode_presets.rs
-index 72731c52d34a8151cc2825c5029d39ef0833605a..fe28e095f78e24c1347b4b7b1011ad64cd89b9bb 100644
+index 72731c52d..fe28e095f 100644
 --- a/codex-rs/models-manager/src/collaboration_mode_presets.rs
 +++ b/codex-rs/models-manager/src/collaboration_mode_presets.rs
 @@ -14,30 +14,48 @@ static COLLABORATION_MODE_DEFAULT_TEMPLATE: LazyLock<Template> = LazyLock::new(|
@@ -1618,7 +1711,7 @@ index 72731c52d34a8151cc2825c5029d39ef0833605a..fe28e095f78e24c1347b4b7b1011ad64
      COLLABORATION_MODE_DEFAULT_TEMPLATE
          .render([(KNOWN_MODE_NAMES_TEMPLATE_KEY, known_mode_names.as_str())])
 diff --git a/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs b/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
-index 4e21d6d350d35672254f521dfe73f9d4f358479c..cd3c73effa6f395e0aedf56fc97a12c9e204bf13 100644
+index 4e21d6d35..cd3c73eff 100644
 --- a/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
 +++ b/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
 @@ -3,20 +3,20 @@ use pretty_assertions::assert_eq;
@@ -1676,12 +1769,12 @@ index 4e21d6d350d35672254f521dfe73f9d4f358479c..cd3c73effa6f395e0aedf56fc97a12c9
 +    assert_eq!(plan_instructions.as_deref(), Some("plan override"));
 +}
 diff --git a/codex-rs/thread-manager-sample/src/main.rs b/codex-rs/thread-manager-sample/src/main.rs
-index 4237a33fefe8142eb4a1addaa6d1a721664aa60a..3da85ff22c8d4b9033685cb555d1028a99ca9b75 100644
+index f01bc1225..86ff61603 100644
 --- a/codex-rs/thread-manager-sample/src/main.rs
 +++ b/codex-rs/thread-manager-sample/src/main.rs
-@@ -193,6 +193,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
-         show_raw_agent_reasoning: false,
+@@ -210,6 +210,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
          base_instructions: None,
+         base_instructions_provenance: None,
          developer_instructions: None,
 +        instruction_overrides: Default::default(),
          guardian_policy_config: None,

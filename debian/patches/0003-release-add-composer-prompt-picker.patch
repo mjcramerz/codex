@@ -1,8 +1,23 @@
-diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
-index 554df264e2b1d602205fcc900c32bb084d1a12c1..8b7d40168da3f8db6aee1d6c45292f1d8f8338c6 100644
---- a/codex-rs/tui/src/app.rs
-+++ b/codex-rs/tui/src/app.rs
-@@ -833,7 +833,16 @@ impl App {
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index 1a23f6f06..349c26797 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -2375,6 +2375,10 @@ impl App {
+             AppEvent::OpenReviewCustomPrompt => {
+                 self.chat_widget.show_review_custom_prompt();
+             }
++            AppEvent::SetComposerText { text } => {
++                self.chat_widget
++                    .set_composer_text(text, Vec::new(), Vec::new());
++            }
+             AppEvent::SubmitUserMessageWithMode {
+                 text,
+                 collaboration_mode,
+diff --git a/codex-rs/tui/src/app/startup.rs b/codex-rs/tui/src/app/startup.rs
+index 97d5bb697..84b6129f8 100644
+--- a/codex-rs/tui/src/app/startup.rs
++++ b/codex-rs/tui/src/app/startup.rs
+@@ -161,7 +161,16 @@ impl App {
          if let Some(updated_model) = config.model.clone() {
              model = updated_model;
          }
@@ -20,26 +35,11 @@ index 554df264e2b1d602205fcc900c32bb084d1a12c1..8b7d40168da3f8db6aee1d6c45292f1d
          let feedback_audience = bootstrap.feedback_audience;
          let auth_mode = bootstrap.auth_mode;
          let has_chatgpt_account = bootstrap.has_chatgpt_account;
-diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
-index afe269195af4e3faba3141b77ab89d6521f215cf..6ee2d4173821a9243b156dd89ee7f4d2f626dbb4 100644
---- a/codex-rs/tui/src/app/event_dispatch.rs
-+++ b/codex-rs/tui/src/app/event_dispatch.rs
-@@ -2017,6 +2017,10 @@ impl App {
-             AppEvent::OpenReviewCustomPrompt => {
-                 self.chat_widget.show_review_custom_prompt();
-             }
-+            AppEvent::SetComposerText { text } => {
-+                self.chat_widget
-+                    .set_composer_text(text, Vec::new(), Vec::new());
-+            }
-             AppEvent::SubmitUserMessageWithMode {
-                 text,
-                 collaboration_mode,
 diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
-index 23e42ce8fe15b9546e8c7fbb38a881d995704b6a..8c3eabc3143b699b16d36f50ddb283ef8a394c08 100644
+index 6fde0759d..f3b1aaf24 100644
 --- a/codex-rs/tui/src/app_event.rs
 +++ b/codex-rs/tui/src/app_event.rs
-@@ -955,6 +955,11 @@ pub(crate) enum AppEvent {
+@@ -1080,6 +1080,11 @@ pub(crate) enum AppEvent {
      /// Open the custom prompt option from the review popup.
      OpenReviewCustomPrompt,
  
@@ -52,7 +52,7 @@ index 23e42ce8fe15b9546e8c7fbb38a881d995704b6a..8c3eabc3143b699b16d36f50ddb283ef
      SubmitUserMessageWithMode {
          text: String,
 diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
-index df9c65f8cefb8d33ad4360e0da2eb8655aa3f11d..32fad33e93d1b0a7d002f45cd36469d065456ad4 100644
+index fafe2e079..3e5e2f107 100644
 --- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
 +++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
 @@ -14,6 +14,7 @@ use crate::bottom_pane::slash_commands::SlashCommandItem;
@@ -124,7 +124,7 @@ index df9c65f8cefb8d33ad4360e0da2eb8655aa3f11d..32fad33e93d1b0a7d002f45cd36469d0
      fn emit_raw_output_mode_changed(&self, enabled: bool) {
          self.app_event_tx
              .send(AppEvent::RawOutputModeChanged { enabled });
-@@ -250,8 +305,12 @@ impl ChatWidget {
+@@ -257,8 +312,12 @@ impl ChatWidget {
                      .send(AppEvent::OpenDesktopThread { thread_id });
              }
              SlashCommand::Init => {
@@ -138,10 +138,10 @@ index df9c65f8cefb8d33ad4360e0da2eb8655aa3f11d..32fad33e93d1b0a7d002f45cd36469d0
 +                self.submit_user_message(init_prompt.to_string().into());
              }
              SlashCommand::Compact => {
-                 self.clear_token_usage();
-@@ -263,6 +322,9 @@ impl ChatWidget {
-             SlashCommand::Review => {
-                 self.open_review_popup();
+                 if self.blocks_direct_input {
+@@ -278,6 +337,9 @@ impl ChatWidget {
+                     self.defer_input_until_settings_applied();
+                 }
              }
 +            SlashCommand::Prompt => {
 +                self.open_prompt_picker();
@@ -149,17 +149,17 @@ index df9c65f8cefb8d33ad4360e0da2eb8655aa3f11d..32fad33e93d1b0a7d002f45cd36469d0
              SlashCommand::Rename => {
                  self.session_telemetry
                      .counter("codex.thread.rename", /*inc*/ 1, &[]);
-@@ -1060,6 +1122,7 @@ impl ChatWidget {
-             | SlashCommand::Rename
+@@ -1104,6 +1166,7 @@ impl ChatWidget {
              | SlashCommand::TestApproval => QueueDrain::Continue,
              SlashCommand::Feedback
+             | SlashCommand::Export
 +            | SlashCommand::Prompt
              | SlashCommand::New
              | SlashCommand::Archive
              | SlashCommand::Delete
 diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ed5d36132d4105ff33d00ac394b506a0efa7792
+index 000000000..7ed5d3613
 --- /dev/null
 +++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap
 @@ -0,0 +1,11 @@
@@ -175,10 +175,10 @@ index 0000000000000000000000000000000000000000..7ed5d36132d4105ff33d00ac394b506a
 +
 +  Press enter to confirm or esc to go back
 diff --git a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
-index d8b3f8a0cd7915ec6174b9ec21bf13cb7ebf3822..09197cc5d0398de02995423de3ab5b23650abd89 100644
+index bb6250580..6672f44a2 100644
 --- a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
-@@ -637,6 +637,28 @@ async fn slash_init_does_not_depend_on_loaded_instruction_sources() {
+@@ -649,6 +649,28 @@ async fn slash_init_does_not_depend_on_loaded_instruction_sources() {
      assert_eq!(recall_latest_after_clearing(&mut chat), "/init");
  }
  
@@ -207,7 +207,7 @@ index d8b3f8a0cd7915ec6174b9ec21bf13cb7ebf3822..09197cc5d0398de02995423de3ab5b23
  #[tokio::test]
  async fn bare_slash_command_is_available_from_local_recall_after_dispatch() {
      let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-@@ -2329,6 +2351,47 @@ async fn slash_memory_update_reports_stubbed_feature() {
+@@ -2360,6 +2382,47 @@ async fn slash_memory_update_reports_stubbed_feature() {
      );
  }
  
@@ -256,7 +256,7 @@ index d8b3f8a0cd7915ec6174b9ec21bf13cb7ebf3822..09197cc5d0398de02995423de3ab5b23
  async fn slash_resume_opens_picker_while_mcp_startup_is_running() {
      let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 diff --git a/codex-rs/tui/src/collaboration_modes.rs b/codex-rs/tui/src/collaboration_modes.rs
-index b81f4bf4dc79097311bbd29d08dd0a32e22cb3a7..66b50d4d37d490c3dc54f875d01f5e882a235586 100644
+index b81f4bf4d..66b50d4d3 100644
 --- a/codex-rs/tui/src/collaboration_modes.rs
 +++ b/codex-rs/tui/src/collaboration_modes.rs
 @@ -1,13 +1,14 @@
@@ -278,42 +278,11 @@ index b81f4bf4dc79097311bbd29d08dd0a32e22cb3a7..66b50d4d37d490c3dc54f875d01f5e88
          .collect()
  }
  
-diff --git a/codex-rs/tui/src/history_cell/notices.rs b/codex-rs/tui/src/history_cell/notices.rs
-index c2fa6c921ba3d7169fe9d24b5397c7f7eef259c7..89d965747f20a9a6be50b6dae78e0d16e06d0312 100644
---- a/codex-rs/tui/src/history_cell/notices.rs
-+++ b/codex-rs/tui/src/history_cell/notices.rs
-@@ -35,7 +35,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
- 
-         let content = text![
-             line![
--                padded_emoji("✨").bold().cyan(),
-+                "✨\u{200A}".bold().cyan(),
-                 "Update available!".bold().cyan(),
-                 " ",
-                 format!("{CODEX_CLI_VERSION} -> {}", self.latest_version).bold(),
-diff --git a/codex-rs/tui/src/history_cell/session.rs b/codex-rs/tui/src/history_cell/session.rs
-index c63f6f746c92ca6f4e5c04d2b5bfa22a68304fac..695efc30f9a060d66a2b72bf8e275d65773b794d 100644
---- a/codex-rs/tui/src/history_cell/session.rs
-+++ b/codex-rs/tui/src/history_cell/session.rs
-@@ -71,13 +71,6 @@ fn with_border_internal(
-     out
- }
- 
--/// Return the emoji followed by a hair space (U+200A).
--/// Using only the hair space avoids excessive padding after the emoji while
--/// still providing a small visual gap across terminals.
--pub(crate) fn padded_emoji(emoji: &str) -> String {
--    format!("{emoji}\u{200A}")
--}
--
- #[derive(Debug)]
- struct TooltipHistoryCell {
-     tip: String,
 diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
-index 96f442a88cc350b01677b7e3a42dccd355129c96..81db828878c50f5a269a9d3fa885195954d70a67 100644
+index f8a973472..fbc8b391c 100644
 --- a/codex-rs/tui/src/lib.rs
 +++ b/codex-rs/tui/src/lib.rs
-@@ -154,6 +154,7 @@ pub(crate) mod onboarding;
+@@ -160,6 +160,7 @@ pub(crate) mod onboarding;
  mod oss_selection;
  mod pager_overlay;
  mod permission_compat;
@@ -322,7 +291,7 @@ index 96f442a88cc350b01677b7e3a42dccd355129c96..81db828878c50f5a269a9d3fa8851959
  mod render;
  mod resize_reflow_cap;
 diff --git a/codex-rs/tui/src/model_catalog.rs b/codex-rs/tui/src/model_catalog.rs
-index 69c9ded5669b819cddde3c11452d4af22b2ce52f..9714d22e31c5ab867a29473ab2073419d01b5bef 100644
+index 69c9ded56..9714d22e3 100644
 --- a/codex-rs/tui/src/model_catalog.rs
 +++ b/codex-rs/tui/src/model_catalog.rs
 @@ -1,17 +1,37 @@
@@ -366,7 +335,7 @@ index 69c9ded5669b819cddde3c11452d4af22b2ce52f..9714d22e31c5ab867a29473ab2073419
  }
 diff --git a/codex-rs/tui/src/prompt_files.rs b/codex-rs/tui/src/prompt_files.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..5aaf005caf153ebe1efaae26e838e6f86752c1ac
+index 000000000..5aaf005ca
 --- /dev/null
 +++ b/codex-rs/tui/src/prompt_files.rs
 @@ -0,0 +1,216 @@
@@ -587,7 +556,7 @@ index 0000000000000000000000000000000000000000..5aaf005caf153ebe1efaae26e838e6f8
 +    }
 +}
 diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
-index 646380a2fa59c1e88df2a0479c5a0ec900b2270f..994e90624f837b36e1163e286a82a112ff791d01 100644
+index b36987034..bc8eca40b 100644
 --- a/codex-rs/tui/src/slash_command.rs
 +++ b/codex-rs/tui/src/slash_command.rs
 @@ -29,6 +29,7 @@ pub enum SlashCommand {
@@ -598,7 +567,7 @@ index 646380a2fa59c1e88df2a0479c5a0ec900b2270f..994e90624f837b36e1163e286a82a112
      Rename,
      New,
      Archive,
-@@ -87,6 +88,7 @@ impl SlashCommand {
+@@ -88,6 +89,7 @@ impl SlashCommand {
              SlashCommand::Init => "create an AGENTS.md file with instructions for Codex",
              SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
              SlashCommand::Review => "review my current changes and find issues",
@@ -606,7 +575,7 @@ index 646380a2fa59c1e88df2a0479c5a0ec900b2270f..994e90624f837b36e1163e286a82a112
              SlashCommand::Rename => "rename the current thread",
              SlashCommand::Resume => "resume a saved chat",
              SlashCommand::Archive => "archive this session and exit",
-@@ -180,6 +182,7 @@ impl SlashCommand {
+@@ -187,6 +189,7 @@ impl SlashCommand {
                  | SlashCommand::Mention
                  | SlashCommand::Status
                  | SlashCommand::Usage
@@ -614,7 +583,7 @@ index 646380a2fa59c1e88df2a0479c5a0ec900b2270f..994e90624f837b36e1163e286a82a112
                  | SlashCommand::Ide
          )
      }
-@@ -214,6 +217,7 @@ impl SlashCommand {
+@@ -222,6 +225,7 @@ impl SlashCommand {
              | SlashCommand::Copy
              | SlashCommand::Raw
              | SlashCommand::Rename
@@ -622,23 +591,3 @@ index 646380a2fa59c1e88df2a0479c5a0ec900b2270f..994e90624f837b36e1163e286a82a112
              | SlashCommand::Mention
              | SlashCommand::Skills
              | SlashCommand::Hooks
-diff --git a/codex-rs/tui/src/update_prompt.rs b/codex-rs/tui/src/update_prompt.rs
-index 8fec45590fd65cb8a9bc38185800e12631e11ab2..28360a5b73d3106f250c17a8365c5373e16019a0 100644
---- a/codex-rs/tui/src/update_prompt.rs
-+++ b/codex-rs/tui/src/update_prompt.rs
-@@ -1,6 +1,5 @@
- #![cfg(not(debug_assertions))]
- 
--use crate::history_cell::padded_emoji;
- use crate::key_hint;
- use crate::legacy_core::config::Config;
- use crate::render::Insets;
-@@ -192,7 +191,7 @@ impl WidgetRef for &UpdatePromptScreen {
- 
-         column.push("");
-         column.push(Line::from(vec![
--            padded_emoji("  ✨").bold().cyan(),
-+            "  ✨\u{200A}".bold().cyan(),
-             "Update available!".bold(),
-             " ".into(),
-             format!(

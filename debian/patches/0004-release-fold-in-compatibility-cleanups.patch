@@ -1,25 +1,8 @@
-diff --git a/codex-rs/app-server/src/config_manager_service.rs b/codex-rs/app-server/src/config_manager_service.rs
-index 94980bf8e012f89858c656d62d9ea813a958ea07..7856ba15937927689c95b5bffa04c5c200af76cf 100644
---- a/codex-rs/app-server/src/config_manager_service.rs
-+++ b/codex-rs/app-server/src/config_manager_service.rs
-@@ -658,9 +658,9 @@ fn compute_override_metadata(
-     effective: &TomlValue,
-     segments: &[String],
- ) -> Option<OverriddenMetadata> {
--    let user_value = match layers.get_active_user_layer() {
--        Some(user_layer) => value_at_path(&user_layer.config, segments),
--        None => return None,
-+    let user_value = {
-+        let user_layer = layers.get_active_user_layer()?;
-+        value_at_path(&user_layer.config, segments)
-     };
-     let effective_value = value_at_path(effective, segments);
- 
 diff --git a/codex-rs/app-server/src/lib.rs b/codex-rs/app-server/src/lib.rs
-index 0edb57d8a2149edb13fe70534b7ed81c579c83a6..d022a717dd21279b8e4345b29ebaaa73b1235fd3 100644
+index 058814830..34e1e9df3 100644
 --- a/codex-rs/app-server/src/lib.rs
 +++ b/codex-rs/app-server/src/lib.rs
-@@ -1325,9 +1325,12 @@ fn test_user_config_file_from_env() -> Option<std::path::PathBuf> {
+@@ -1345,9 +1345,12 @@ fn test_user_config_file_from_env() -> Option<std::path::PathBuf> {
  }
  
  fn loader_overrides_with_test_user_config_file(
@@ -34,10 +17,10 @@ index 0edb57d8a2149edb13fe70534b7ed81c579c83a6..d022a717dd21279b8e4345b29ebaaa73
      if let Some(path) = test_user_config_file {
          let path = AbsolutePathBuf::from_absolute_path(path).map_err(|err| {
 diff --git a/codex-rs/app-server/src/main.rs b/codex-rs/app-server/src/main.rs
-index 7599e498d9d7800287e6d73f57bf4a6b7ef46bc2..46aedee2387c45d042b987f75102cb7b4c62dea1 100644
+index 4d5ab3f12..c2aa6c366 100644
 --- a/codex-rs/app-server/src/main.rs
 +++ b/codex-rs/app-server/src/main.rs
-@@ -2,7 +2,6 @@ use clap::Parser;
+@@ -3,7 +3,6 @@ use codex_app_server::AppServerCodeModeHostArgs;
  use codex_app_server::AppServerRuntimeOptions;
  use codex_app_server::AppServerTransport;
  use codex_app_server::AppServerWebsocketAuthArgs;
@@ -45,8 +28,8 @@ index 7599e498d9d7800287e6d73f57bf4a6b7ef46bc2..46aedee2387c45d042b987f75102cb7b
  use codex_app_server::run_main_with_transport_options;
  use codex_arg0::Arg0DispatchPaths;
  use codex_arg0::arg0_dispatch_or_else;
-@@ -83,7 +82,7 @@ fn main() -> anyhow::Result<()> {
-         let mut runtime_options = AppServerRuntimeOptions::default();
+@@ -91,7 +90,7 @@ fn main() -> anyhow::Result<()> {
+         };
          #[cfg(debug_assertions)]
          if disable_plugin_startup_tasks_for_tests {
 -            runtime_options.plugin_startup_tasks = PluginStartupTasks::Skip;
@@ -55,10 +38,10 @@ index 7599e498d9d7800287e6d73f57bf4a6b7ef46bc2..46aedee2387c45d042b987f75102cb7b
          runtime_options.remote_control_startup_mode =
              match (remote_control, remote_control_disabled) {
 diff --git a/codex-rs/app-server/src/message_processor.rs b/codex-rs/app-server/src/message_processor.rs
-index 375307e804f7f9132411a1664278476a9eb9cba3..3565439ad97c53877eb7d0971e821ab573aa6b0e 100644
+index d02be3412..dd53b63f3 100644
 --- a/codex-rs/app-server/src/message_processor.rs
 +++ b/codex-rs/app-server/src/message_processor.rs
-@@ -1029,7 +1029,7 @@ impl MessageProcessor {
+@@ -1000,7 +1000,7 @@ impl MessageProcessor {
                  .clients_revoke(params)
                  .await
                  .map(|response| Some(response.into())),
@@ -67,7 +50,7 @@ index 375307e804f7f9132411a1664278476a9eb9cba3..3565439ad97c53877eb7d0971e821ab5
                  .config_processor
                  .config_requirements_read()
                  .await
-@@ -1085,7 +1085,7 @@ impl MessageProcessor {
+@@ -1059,7 +1059,7 @@ impl MessageProcessor {
                  .unwatch(connection_id, params)
                  .await
                  .map(|response| Some(response.into())),
@@ -76,7 +59,7 @@ index 375307e804f7f9132411a1664278476a9eb9cba3..3565439ad97c53877eb7d0971e821ab5
                  .config_processor
                  .model_provider_capabilities_read()
                  .await
-@@ -1368,7 +1368,7 @@ impl MessageProcessor {
+@@ -1407,7 +1407,7 @@ impl MessageProcessor {
                      .thread_realtime_stop(&request_id, params)
                      .await
              }
@@ -86,10 +69,10 @@ index 375307e804f7f9132411a1664278476a9eb9cba3..3565439ad97c53877eb7d0971e821ab5
              }
              ClientRequest::ReviewStart { params, .. } => {
 diff --git a/codex-rs/cli/src/doctor.rs b/codex-rs/cli/src/doctor.rs
-index ef587cd1d4eb90dfb23b59b26a1ca57493e79622..3d1dcdcbd4c8ac880885ad2fe8783ee44b62086f 100644
+index 65e5ed14b..a0a987b60 100644
 --- a/codex-rs/cli/src/doctor.rs
 +++ b/codex-rs/cli/src/doctor.rs
-@@ -3968,6 +3968,10 @@ mod tests {
+@@ -4025,6 +4025,10 @@ mod tests {
      fn read_probe_file_rejects_unreadable_file() {
          use std::os::unix::fs::PermissionsExt;
  
@@ -100,21 +83,24 @@ index ef587cd1d4eb90dfb23b59b26a1ca57493e79622..3d1dcdcbd4c8ac880885ad2fe8783ee4
          let file = tempfile::NamedTempFile::new().expect("create temp file");
          std::fs::write(file.path(), "cert").expect("write temp file");
          let mut permissions = std::fs::metadata(file.path())
-diff --git a/codex-rs/codex-mcp/src/connection_manager.rs b/codex-rs/codex-mcp/src/connection_manager.rs
-index c76e3c3c081755893e82767cbbbc2074988ed973..13dab7fcac8cdf976709947037126989d7b2a391 100644
---- a/codex-rs/codex-mcp/src/connection_manager.rs
-+++ b/codex-rs/codex-mcp/src/connection_manager.rs
-@@ -917,17 +917,13 @@ fn should_share_codex_apps_tools_cache(server_name: &str, uses_env_bearer_token:
-     server_name == CODEX_APPS_MCP_SERVER_NAME && !uses_env_bearer_token
- }
+diff --git a/codex-rs/codex-mcp/src/connection_manager/startup.rs b/codex-rs/codex-mcp/src/connection_manager/startup.rs
+index 138d6877b..20b661d3b 100644
+--- a/codex-rs/codex-mcp/src/connection_manager/startup.rs
++++ b/codex-rs/codex-mcp/src/connection_manager/startup.rs
+@@ -1,6 +1,5 @@
+ use std::collections::HashMap;
  
--async fn emit_update(
--    submit_id: &str,
--    tx_event: &Sender<Event>,
--    update: McpStartupUpdateEvent,
+-use anyhow::Result;
+ use async_channel::Sender;
+ use codex_api::SharedAuthProvider;
+ use codex_config::McpServerAuth;
+@@ -42,13 +41,13 @@ pub(super) async fn emit_update(
+     submit_id: &str,
+     tx_event: &Sender<Event>,
+     update: McpStartupUpdateEvent,
 -) -> Result<(), async_channel::SendError<Event>> {
 -    tx_event
-+async fn emit_update(submit_id: &str, tx_event: &Sender<Event>, update: McpStartupUpdateEvent) {
++) {
 +    let _ = tx_event
          .send(Event {
              id: submit_id.to_string(),
@@ -124,12 +110,12 @@ index c76e3c3c081755893e82767cbbbc2074988ed973..13dab7fcac8cdf976709947037126989
 +        .await;
  }
  
- fn mcp_startup_failure_reason(
-diff --git a/codex-rs/external-agent-migration/src/lib.rs b/codex-rs/external-agent-migration/src/lib.rs
-index 7e5f626d8d0194041a1c7db10899ce8adadf5c68..ec8686bae21f7e7eca0c2ac95266f5ac56c97baf 100644
---- a/codex-rs/external-agent-migration/src/lib.rs
-+++ b/codex-rs/external-agent-migration/src/lib.rs
-@@ -373,7 +373,8 @@ fn mcp_server_toml_table(
+ pub(super) fn mcp_startup_failure_reason(
+diff --git a/codex-rs/external-agent-migration/src/mcp.rs b/codex-rs/external-agent-migration/src/mcp.rs
+index eb820ce24..46889af75 100644
+--- a/codex-rs/external-agent-migration/src/mcp.rs
++++ b/codex-rs/external-agent-migration/src/mcp.rs
+@@ -222,7 +222,8 @@ fn mcp_server_toml_table(
          if let Some(env) = server_config.get("env").and_then(JsonValue::as_object) {
              append_env_config(&mut table, env)?;
          }
@@ -139,7 +125,7 @@ index 7e5f626d8d0194041a1c7db10899ce8adadf5c68..ec8686bae21f7e7eca0c2ac95266f5ac
          if !matches!(
              transport_type,
              None | Some("http") | Some("streamable_http")
-@@ -387,8 +388,6 @@ fn mcp_server_toml_table(
+@@ -236,8 +237,6 @@ fn mcp_server_toml_table(
          if let Some(headers) = server_config.get("headers").and_then(JsonValue::as_object) {
              append_header_config(&mut table, headers)?;
          }
@@ -149,7 +135,7 @@ index 7e5f626d8d0194041a1c7db10899ce8adadf5c68..ec8686bae21f7e7eca0c2ac95266f5ac
  
      Some(table)
 diff --git a/codex-rs/response-debug-context/src/lib.rs b/codex-rs/response-debug-context/src/lib.rs
-index d9c186e02e85b97ead4f625eabde287e731e91e5..490bb1c7929c72f3d7b2759433d6893496944fad 100644
+index 822210d14..82f120db8 100644
 --- a/codex-rs/response-debug-context/src/lib.rs
 +++ b/codex-rs/response-debug-context/src/lib.rs
 @@ -19,10 +19,7 @@ pub struct ResponseDebugContext {
@@ -165,7 +151,7 @@ index d9c186e02e85b97ead4f625eabde287e731e91e5..490bb1c7929c72f3d7b2759433d68934
      };
  
 diff --git a/codex-rs/shell-command/src/bash.rs b/codex-rs/shell-command/src/bash.rs
-index 007fbf956c0357c6c2a2c3723dfcdfc47f24ee8b..cc2d35a353ce2eb8182fdbe5aa840ab807cc696c 100644
+index 10da75fb6..fe0a2c99f 100644
 --- a/codex-rs/shell-command/src/bash.rs
 +++ b/codex-rs/shell-command/src/bash.rs
 @@ -85,11 +85,8 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
@@ -183,7 +169,7 @@ index 007fbf956c0357c6c2a2c3723dfcdfc47f24ee8b..cc2d35a353ce2eb8182fdbe5aa840ab8
      Some(commands)
  }
 diff --git a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs b/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
-index 0b7501cdb958a38c0b93e44ca981c7dbd4d912ff..2a35e73dad0f06a5b31f3a977f723e8f30ac44d3 100644
+index 0b7501cdb..2a35e73da 100644
 --- a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
 +++ b/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
 @@ -92,7 +92,7 @@ where
