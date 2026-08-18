@@ -24,6 +24,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Repository root whose .mcr artifacts should be checked. Defaults to --repo-root.",
     )
+    parser.add_argument(
+        "--skip-config",
+        action="store_true",
+        help=(
+            "Check only non-Rust instruction artifacts. Use this when the "
+            "patched config schema cannot be regenerated on the current host."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -59,16 +67,21 @@ def main() -> int:
     actual_static = actual_root / "static-instructions"
     actual_config = actual_root / "config.toml"
 
-    if not actual_override.is_dir() or not actual_static.is_dir() or not actual_config.is_file():
+    if (
+        not actual_override.is_dir()
+        or not actual_static.is_dir()
+        or (not args.skip_config and not actual_config.is_file())
+    ):
         print("error: instruction artifact verification failed", file=sys.stderr)
         if not actual_override.is_dir():
             print("  - missing directory: .mcr/override-instructions", file=sys.stderr)
         if not actual_static.is_dir():
             print("  - missing directory: .mcr/static-instructions", file=sys.stderr)
-        if not actual_config.is_file():
+        if not args.skip_config and not actual_config.is_file():
             print("  - missing file: .mcr/config.toml", file=sys.stderr)
         return 1
 
+    config_mismatched = False
     with tempfile.TemporaryDirectory(prefix="instruction-inventory-") as tempdir:
         generated_root = Path(tempdir) / ".mcr"
         instruct_script = repo_root / "scripts" / "release" / "instruct.pl"
@@ -79,19 +92,20 @@ def main() -> int:
             capture_output=True,
             text=True,
         )
-        subprocess.run(
-            [
-                sys.executable,
-                str(config_script),
-                "--repo-root",
-                str(repo_root),
-                "--output-file",
-                str(generated_root / "config.toml"),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        if not args.skip_config:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(config_script),
+                    "--repo-root",
+                    str(repo_root),
+                    "--output-file",
+                    str(generated_root / "config.toml"),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
         override_missing, override_unexpected, override_mismatched = compare_tree(
             generated_root / "override-instructions",
@@ -104,7 +118,10 @@ def main() -> int:
         total_files = len(list_relative_files(generated_root / "override-instructions")) + len(
             list_relative_files(generated_root / "static-instructions")
         )
-        config_mismatched = generated_root.joinpath("config.toml").read_text(encoding="utf-8") != actual_config.read_text(encoding="utf-8")
+        if not args.skip_config:
+            config_mismatched = generated_root.joinpath("config.toml").read_text(
+                encoding="utf-8"
+            ) != actual_config.read_text(encoding="utf-8")
 
     if (
         override_missing
@@ -132,7 +149,8 @@ def main() -> int:
             print("  - stale file: .mcr/config.toml", file=sys.stderr)
         return 1
 
-    print(f"ok: instruction artifacts verified ({total_files} files + config.toml)")
+    checked_config = "" if args.skip_config else " + config.toml"
+    print(f"ok: instruction artifacts verified ({total_files} files{checked_config})")
     return 0
 
 

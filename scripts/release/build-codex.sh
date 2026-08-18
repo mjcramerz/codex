@@ -53,6 +53,8 @@ Options:
                        Default: 1 to bound peak release-build memory.
   --jobs N             Limit jobs for each selected compilation backend.
                        Default: 1
+  --cargo-jobs N       Limit Cargo jobs independently from Bazel jobs.
+                       Defaults to --jobs when omitted.
   -h, --help           Show this help text.
 
 This script is intended for manual x86_64 GNU/Linux release builds only.
@@ -750,6 +752,9 @@ manifest = {
     ],
     "artifact_backend": os.environ["ARTIFACT_BACKEND"],
     "build_jobs": int(os.environ["BUILD_JOBS"]),
+    "cargo_build_jobs": (
+        int(os.environ["CARGO_JOBS"]) if run_cargo else None
+    ),
     "version": os.environ["WORKSPACE_VERSION"],
     "target": os.environ["RUST_TARGET"],
     "base_ref": os.environ["BASE_REF"],
@@ -875,6 +880,7 @@ BAZEL_TARGET="${DEFAULT_BAZEL_TARGET}"
 RUSTC_THREADS="${RELEASE_RUSTC_THREADS:-${DEFAULT_RUSTC_THREADS}}"
 BASE_REF=""
 BUILD_JOBS="${DEFAULT_BUILD_JOBS}"
+CARGO_JOBS=""
 WORKSPACE_VERSION_OVERRIDE=""
 COMP="${DEFAULT_COMP}"
 RUN_BAZEL="false"
@@ -940,6 +946,11 @@ while [ $# -gt 0 ]; do
     --jobs)
       [ $# -ge 2 ] || die "--jobs requires a value"
       BUILD_JOBS="$2"
+      shift 2
+      ;;
+    --cargo-jobs)
+      [ $# -ge 2 ] || die "--cargo-jobs requires a value"
+      CARGO_JOBS="$2"
       shift 2
       ;;
     -h|--help)
@@ -1014,6 +1025,12 @@ esac
 if ! [[ "${BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
   die "--jobs must be a positive integer"
 fi
+if [ -z "${CARGO_JOBS}" ]; then
+  CARGO_JOBS="${BUILD_JOBS}"
+fi
+if ! [[ "${CARGO_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+  die "--cargo-jobs must be a positive integer"
+fi
 validate_target_cpu "${RUST_TARGET_CPU}"
 if [ "${RUN_BAZEL}" = "true" ]; then
   case "${BAZEL_TARGET}" in
@@ -1031,6 +1048,7 @@ fi
 
 export BUILD_ROOT CACHE_ROOT BASE_REF RUST_TARGET RELEASE_ARCHIVE_NAME BAZEL_TARGET
 export RUST_TARGET_CPU COMP RUN_BAZEL RUN_CARGO ARTIFACT_BACKEND BUILD_JOBS
+export CARGO_JOBS
 export BAZEL_COMPILATION_MODE
 
 run mkdir -p -- "${BUILD_ROOT}" "${CACHE_ROOT}"
@@ -1199,14 +1217,12 @@ if [ "${RUN_CARGO}" = "true" ]; then
     --locked
     --target "${RUST_TARGET}"
   )
-  if [ -n "${BUILD_JOBS}" ]; then
-    BUILD_CMD+=(--jobs "${BUILD_JOBS}")
-  fi
+  BUILD_CMD+=(--jobs "${CARGO_JOBS}")
   for bin in "${RELEASE_BINS[@]}"; do
     BUILD_CMD+=(--bin "${bin}")
   done
 
-  info "Building ${#RELEASE_BINS[@]} release binary/binaries for ${RUST_TARGET} with Cargo"
+  info "Building ${#RELEASE_BINS[@]} release binary/binaries for ${RUST_TARGET} with Cargo (${CARGO_JOBS} job(s))"
   run_with_mise_rust "${RUST_CHANNEL}" cargo "${BUILD_CMD[@]}"
 fi
 

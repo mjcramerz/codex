@@ -32,6 +32,7 @@ do
 done
 
 python3 -m py_compile \
+  patches/release/verify_prompt_inventory_contract.py \
   patches/release/verify_release_bin_contract.py \
   patches/release/verify_rust_release_source_contract.py \
   scripts/release/codex_version.py \

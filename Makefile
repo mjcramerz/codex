@@ -30,6 +30,8 @@ RELEASE_TARGET_CPU ?= skylake
 RELEASE_TOOLCHAIN ?= nightly
 RELEASE_BAZEL_TARGET ?= //bazel/release:release-binaries
 RELEASE_JOBS ?=
+# Keep memory-heavy Cargo release rustc processes serialized by default.
+RELEASE_CARGO_JOBS ?= 1
 RELEASE_RUSTC_THREADS ?= 1
 RELEASE_BASE_REF ?= mcr/main
 VERSION ?=
@@ -60,6 +62,9 @@ ifneq ($(strip $(RELEASE_JOBS)),)
 RELEASE_BUILD_ARGS += --jobs "$(RELEASE_JOBS)"
 endif
 ifneq ($(filter both cargo,$(strip $(COMP))),)
+ifneq ($(strip $(RELEASE_CARGO_JOBS)),)
+RELEASE_BUILD_ARGS += --cargo-jobs "$(RELEASE_CARGO_JOBS)"
+endif
 ifneq ($(strip $(RELEASE_RUSTC_THREADS)),)
 RELEASE_BUILD_ARGS += --rustc-threads "$(RELEASE_RUSTC_THREADS)"
 endif

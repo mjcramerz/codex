@@ -115,6 +115,7 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_make_compilation_backend_routing(self) -> None:
         environment = os.environ.copy()
         environment.pop("COMP", None)
+        environment.pop("RELEASE_CARGO_JOBS", None)
         environment.pop("RELEASE_RUSTC_THREADS", None)
         cases = (
             (None, "both", True, True),
@@ -155,6 +156,10 @@ class ReleaseToolsTest(unittest.TestCase):
                     '--rustc-threads "1"' in output,
                     has_cargo,
                 )
+                self.assertEqual(
+                    '--cargo-jobs "1"' in output,
+                    has_cargo,
+                )
                 self.assertIn("codex.tar.gz", output)
                 self.assertIn("config.schema.json", output)
 
@@ -176,6 +181,45 @@ class ReleaseToolsTest(unittest.TestCase):
         )
 
         self.assertIn('--rustc-threads "2"', result.stdout)
+
+    def test_make_cargo_jobs_are_bounded_independently(self) -> None:
+        default_result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "build",
+                "COMP=cargo",
+                "VERSION=0.147.0",
+                "RELEASE_JOBS=2",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn('--jobs "2"', default_result.stdout)
+        self.assertIn('--cargo-jobs "1"', default_result.stdout)
+
+        override_result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "build",
+                "COMP=cargo",
+                "VERSION=0.147.0",
+                "RELEASE_JOBS=2",
+                "RELEASE_CARGO_JOBS=2",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn('--cargo-jobs "2"', override_result.stdout)
 
 
 if __name__ == "__main__":

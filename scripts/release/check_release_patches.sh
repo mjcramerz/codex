@@ -84,23 +84,17 @@ CARGO_TARGET_DIR="${target_cache_dir}" \
     --skip-generated-artifacts \
     --keep-worktree >/dev/null
 
-echo "Regenerating non-Rust instruction artifacts after ordered patch application..."
-perl "${tmp_worktree}/scripts/release/instruct.pl" \
-  --repo-root "${tmp_worktree}" \
-  --output-root "${tmp_worktree}/.mcr"
-python3 "${tmp_worktree}/scripts/release/config.py" \
-  --repo-root "${tmp_worktree}" \
-  --output-file "${tmp_worktree}/.mcr/config.toml"
+if [ -f "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_prompt_inventory_contract.py" ]; then
+  echo "Verifying tracked non-Rust instruction artifacts against the ordered patch application..."
+  python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_prompt_inventory_contract.py" \
+    --repo-root "${tmp_worktree}" \
+    --artifacts-root "${REPO_ROOT}" \
+    --skip-config
+fi
 
 echo "Verifying migration numeric versions are unique after ordered patch application..."
 python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_unique_migration_versions.py" \
   --migrations-dir "${tmp_worktree}/codex-rs/state/migrations"
-
-if [ -f "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_prompt_inventory_contract.py" ]; then
-  echo "Verifying instruction inventory after ordered patch application..."
-  python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_prompt_inventory_contract.py" \
-    --repo-root "${tmp_worktree}"
-fi
 
 echo "Verifying Debian GNU release bin contract after ordered patch application..."
 python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_release_bin_contract.py" \
