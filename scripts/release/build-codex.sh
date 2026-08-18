@@ -1138,6 +1138,11 @@ run python3 \
 info "Validating release binary contract after reconciliation"
 run python3 "${CHECKOUT_DIR}/${RELEASE_VERIFY_DIR}/verify_release_bin_contract.py" --repo-root "${CHECKOUT_DIR}"
 
+info "Validating Rust release source contracts after reconciliation"
+run python3 \
+  "${CHECKOUT_DIR}/${RELEASE_VERIFY_DIR}/verify_rust_release_source_contract.py" \
+  --repo-root "${CHECKOUT_DIR}"
+
 WORKSPACE_VERSION="$(read_workspace_version "${CHECKOUT_DIR}/codex-rs/Cargo.toml")"
 if [ -n "${WORKSPACE_VERSION_OVERRIDE}" ] \
   && [ "${WORKSPACE_VERSION}" != "${WORKSPACE_VERSION_OVERRIDE}" ]; then

@@ -83,6 +83,34 @@ index 65e5ed14b..a0a987b60 100644
          let file = tempfile::NamedTempFile::new().expect("create temp file");
          std::fs::write(file.path(), "cert").expect("write temp file");
          let mut permissions = std::fs::metadata(file.path())
+diff --git a/codex-rs/cloud-tasks/src/lib.rs b/codex-rs/cloud-tasks/src/lib.rs
+index fa3fde91f000569178b5129fdedd59a214afa0ec..bc330d5f8916a541df994c981627557c95d5bfb2 100644
+--- a/codex-rs/cloud-tasks/src/lib.rs
++++ b/codex-rs/cloud-tasks/src/lib.rs
+@@ -13,8 +13,10 @@ use codex_cloud_tasks_client::TaskStatus;
+ use codex_git_utils::current_branch_name;
+ use codex_git_utils::default_branch_name;
+ use codex_http_client::ClientRouteClass;
++#[cfg(debug_assertions)]
+ use codex_http_client::HttpClientFactory;
++#[cfg(debug_assertions)]
+ use codex_http_client::OutboundProxyPolicy;
+ use codex_http_client::RouteAwareClientPool;
+ use codex_login::default_client::get_codex_user_agent;
+ use owo_colors::OwoColorize;
+diff --git a/codex-rs/code-mode-runtime/src/session_runtime/mod.rs b/codex-rs/code-mode-runtime/src/session_runtime/mod.rs
+index cc014230f96966420b4ebdac83d1dce03735a071..5ffc747ecf08aa5cd14b4cd20b65aa1a8cc9b3f4 100644
+--- a/codex-rs/code-mode-runtime/src/session_runtime/mod.rs
++++ b/codex-rs/code-mode-runtime/src/session_runtime/mod.rs
+@@ -146,7 +146,7 @@ impl<D: SessionRuntimeDelegate> SessionRuntime<D> {
+     fn allocate_cell_id(&self) -> Result<CellId, Error> {
+         self.inner
+             .next_cell_id
+-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next_cell_id| {
++            .try_update(Ordering::Relaxed, Ordering::Relaxed, |next_cell_id| {
+                 next_cell_id.checked_add(1)
+             })
+             .map(|cell_id| CellId::new(cell_id.to_string()))
 diff --git a/codex-rs/codex-mcp/src/connection_manager/startup.rs b/codex-rs/codex-mcp/src/connection_manager/startup.rs
 index 138d6877b..20b661d3b 100644
 --- a/codex-rs/codex-mcp/src/connection_manager/startup.rs

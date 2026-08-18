@@ -2,6 +2,6 @@
 0002-release-wire-instruction-override-plumbing.patch
 0003-release-add-composer-prompt-picker.patch
 0004-release-fold-in-compatibility-cleanups.patch
-0010-release-box-goal-runtime-future.patch
+0010-release-raise-rust-recursion-limits.patch
 0011-release-wire-hierarchical-agent-instructions.patch
 0012-release-restore-bazel-rule-and-align-deps.patch

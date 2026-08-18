@@ -106,6 +106,10 @@ echo "Verifying Debian GNU release bin contract after ordered patch application.
 python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_release_bin_contract.py" \
   --repo-root "${tmp_worktree}"
 
+echo "Verifying Rust release source contracts after ordered patch application..."
+python3 "${tmp_worktree}/${RELEASE_VERIFY_DIR}/verify_rust_release_source_contract.py" \
+  --repo-root "${tmp_worktree}"
+
 echo "Skipping compile/build verification in scripts/check_release_patches.sh by policy."
 echo "Run tiny, targeted cargo commands manually outside this script if source validation is needed."
 
