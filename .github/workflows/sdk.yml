@@ -1,18 +1,21 @@
 name: sdk
 
 on:
-  workflow_call:
+  push:
+    branches: [main]
+  pull_request: {}
 
 jobs:
   python-sdk:
     runs-on:
-      group: ${{ github.event.repository.name }}-runners
-      labels: ${{ github.event.repository.name }}-linux-x64
+      group: codex-runners
+      labels: codex-linux-x64
     timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Test Python SDK
@@ -32,28 +35,22 @@ jobs:
             sh -euxc '
               python -m venv /tmp/uv
               /tmp/uv/bin/python -m pip install uv==0.11.3
-              /tmp/uv/bin/uv sync --group dev --frozen
-              /tmp/uv/bin/uv run --frozen --no-sync ruff check --output-format=github .
-              /tmp/uv/bin/uv run --frozen --no-sync ruff format --check .
-              /tmp/uv/bin/uv run --frozen --no-sync pytest
+              /tmp/uv/bin/uv sync --extra dev --frozen
+              /tmp/uv/bin/uv run --extra dev ruff check --output-format=github .
+              /tmp/uv/bin/uv run --extra dev ruff format --check .
+              /tmp/uv/bin/uv run --extra dev pytest
             '
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
 
   sdks:
     runs-on:
-      group: ${{ github.event.repository.name }}-runners
-      labels: ${{ github.event.repository.name }}-linux-x64
+      group: codex-runners
+      labels: codex-linux-x64
     timeout-minutes: 10
-    environment:
-      name: bazel
-      deployment: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Install Linux bwrap build dependencies
@@ -158,9 +155,6 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
-          path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
+          path: |
+            ~/.cache/bazel-repo-cache
           key: bazel-cache-x86_64-unknown-linux-gnu-${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
-
-      - name: Check for a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree

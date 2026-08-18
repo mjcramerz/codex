@@ -1,0 +1,23 @@
+filegroup(
+    name = "release-binaries",
+    srcs = [
+        "//codex-rs/app-server-protocol:write_schema_fixtures",
+        "//codex-rs/app-server:codex-app-server",
+        "//codex-rs/app-server:exec-server",
+        "//codex-rs/apply-patch:apply_patch",
+        "//codex-rs/bwrap:bwrap",
+        "//codex-rs/cli:codex",
+        "//codex-rs/code-mode-host:codex-code-mode-host",
+        "//codex-rs/codex-client:custom_ca_probe",
+        "//codex-rs/core:codex-write-config-schema",
+        "//codex-rs/exec:codex-exec",
+        "//codex-rs/file-search:codex-file-search",
+        "//codex-rs/hooks:write_hooks_schema_fixtures",
+        "//codex-rs/linux-sandbox:codex-linux-sandbox",
+        "//codex-rs/mcp-server:codex-mcp-server",
+        "//codex-rs/responses-api-proxy:codex-responses-api-proxy",
+        "//codex-rs/stdio-to-uds:codex-stdio-to-uds",
+        "//codex-rs/tui:codex-tui",
+    ],
+    visibility = ["//visibility:public"],
+)

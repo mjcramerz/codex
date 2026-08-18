@@ -1,0 +1,156 @@
+diff --git a/MODULE.bazel b/MODULE.bazel
+index 2fca2a60ab0bc8aa9c1894c14b61624a9bf7dc41..0804963c3448d8a6ecf4d947fc50b479431a97cc 100644
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -1,7 +1,7 @@
+ module(name = "codex")
+ 
+ bazel_dep(name = "bazel_skylib", version = "1.9.0")
+-bazel_dep(name = "platforms", version = "1.0.0")
++bazel_dep(name = "platforms", version = "1.1.0")
+ 
+ # Expose the public protobuf rules already used transitively by rules_rs.
+ bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
+@@ -134,7 +134,7 @@ use_repo(osx, "macos_sdk")
+ 
+ # Needed to disable xcode...
+ bazel_dep(name = "apple_support", version = "2.1.0")
+-bazel_dep(name = "rules_cc", version = "0.2.18")
++bazel_dep(name = "rules_cc", version = "0.2.20")
+ single_version_override(
+     module_name = "rules_cc",
+     patch_strip = 1,
+diff --git a/bazel/release/BUILD.bazel b/bazel/release/BUILD.bazel
+index 337a112580b9d8d2894b404e0d17a2615f75bf22..8c0d97504cb7e9adde7cc9d3fe58c427c8e6f8ce 100644
+--- a/bazel/release/BUILD.bazel
++++ b/bazel/release/BUILD.bazel
+@@ -1,14 +1,13 @@
+ filegroup(
+     name = "release-binaries",
+     srcs = [
+-        "//codex-rs/app-server-protocol:write_schema_fixtures",
+         "//codex-rs/app-server:codex-app-server",
+         "//codex-rs/app-server:exec-server",
+         "//codex-rs/apply-patch:apply_patch",
+         "//codex-rs/bwrap:bwrap",
+         "//codex-rs/cli:codex",
+         "//codex-rs/code-mode-host:codex-code-mode-host",
+-        "//codex-rs/codex-client:custom_ca_probe",
++        "//codex-rs/http-client:custom_ca_probe",
+         "//codex-rs/core:codex-write-config-schema",
+         "//codex-rs/exec:codex-exec",
+         "//codex-rs/file-search:codex-file-search",
+diff --git a/bazel/rules/BUILD.bazel b/bazel/rules/BUILD.bazel
+new file mode 100644
+index 0000000000000000000000000000000000000000..218872c73c381ad4246a8e4650d5055a24439e0c
+--- /dev/null
++++ b/bazel/rules/BUILD.bazel
+@@ -0,0 +1,5 @@
++package(default_visibility = ["//visibility:public"])
++
++exports_files([
++    "e2e_benchmark.bzl",
++])
+diff --git a/bazel/rules/e2e_benchmark.bzl b/bazel/rules/e2e_benchmark.bzl
+new file mode 100644
+index 0000000000000000000000000000000000000000..035419adad1ef455def97e3f6c0c235877b1c8df
+--- /dev/null
++++ b/bazel/rules/e2e_benchmark.bzl
+@@ -0,0 +1,56 @@
++load("@crates//:defs.bzl", "all_crate_deps")
++load("@rules_rust//rust:defs.bzl", "rust_binary")
++load("//:defs.bzl", "workspace_root_test")
++
++_WORKSPACE_ROOT_MARKER = "//codex-rs/utils/cargo-bin:repo_root.marker"
++
++def codex_e2e_benchmark(name, binaries = [], data = [], deps = []):
++    """Defines a Bazel-only Divan end-to-end benchmark.
++
++    The benchmark source lives at `e2e_benches/<name>.rs`, with hyphens in
++    `name` replaced by underscores. `binaries` are runtime executables made
++    available through the same `CARGO_BIN_EXE_*` bridge used by Rust tests.
++
++    Args:
++        name: Stem for the generated `<name>-bench` target and benchmark.
++        binaries: Runtime executable labels that the benchmark spawns.
++        data: Additional runtime files needed by the benchmark.
++        deps: Additional Rust dependencies beyond the crate's Cargo deps.
++    """
++    benchmark_name = name.replace("-", "_")
++    source = "e2e_benches/{}.rs".format(benchmark_name)
++    binary_name = name + "-bench-bin"
++    runfile_env = {
++        binary: "CARGO_BIN_EXE_" + native.package_relative_label(binary).name
++        for binary in binaries
++    }
++
++    rust_binary(
++        name = binary_name,
++        testonly = True,
++        srcs = [source],
++        crate_name = benchmark_name + "_bench",
++        crate_root = source,
++        deps = all_crate_deps(
++            normal = True,
++            normal_dev = True,
++        ) + [
++            "@crates//:divan",
++        ] + deps,
++    )
++
++    workspace_root_test(
++        name = name + "-bench",
++        args = [
++            "--bench",
++            benchmark_name,
++        ],
++        data = data,
++        # Keep path resolution inside the wrapper so manifest-only runfiles
++        # work on every supported host platform.
++        runfile_env = runfile_env,
++        tags = ["manual"],
++        test_bin = ":" + binary_name,
++        visibility = ["//codex-rs:__pkg__"],
++        workspace_root_marker = _WORKSPACE_ROOT_MARKER,
++    )
+diff --git a/bazel/toolchains/prost/BUILD.bazel b/bazel/toolchains/prost/BUILD.bazel
+new file mode 100644
+index 0000000000000000000000000000000000000000..2b87000bb21996a98aa179bce63496a8a6e5ab34
+--- /dev/null
++++ b/bazel/toolchains/prost/BUILD.bazel
+@@ -0,0 +1,35 @@
++load("@rules_rust//extensions/prost:defs.bzl", "rust_prost_toolchain")
++load("@rules_rust//rust:defs.bzl", "rust_library_group")
++
++package(default_visibility = ["//visibility:public"])
++
++rust_library_group(
++    name = "prost_runtime",
++    deps = ["@crates//:prost"],
++)
++
++rust_library_group(
++    name = "tonic_runtime",
++    deps = [
++        ":prost_runtime",
++        "@crates//:tonic",
++        "@crates//:tonic-prost",
++    ],
++)
++
++rust_prost_toolchain(
++    name = "toolchain_impl",
++    compile_well_known_types = False,
++    prost_plugin = "@rules_rs//rs/private/prost:protoc-gen-prost__protoc-gen-prost",
++    prost_runtime = ":prost_runtime",
++    prost_types = "@crates//:prost-types-0.14.3",
++    tonic_plugin = "@rules_rs//rs/private/prost:protoc-gen-tonic__protoc-gen-tonic",
++    tonic_plugin_flag = "--plugin=protoc-gen-tonic=%s",
++    tonic_runtime = ":tonic_runtime",
++)
++
++toolchain(
++    name = "toolchain",
++    toolchain = ":toolchain_impl",
++    toolchain_type = "@rules_rust//extensions/prost:toolchain_type",
++)

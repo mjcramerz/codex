@@ -1,0 +1,1658 @@
+diff --git a/codex-rs/app-server/src/request_processors.rs b/codex-rs/app-server/src/request_processors.rs
+index 0929e2629effbacb1fbdc5bb86fa658fc8d11a2d..99ef691a0725ba4dc6f41da63fcd71744cc48ca1 100644
+--- a/codex-rs/app-server/src/request_processors.rs
++++ b/codex-rs/app-server/src/request_processors.rs
+@@ -423,7 +423,6 @@ use codex_mcp::read_mcp_resource as read_mcp_resource_without_thread;
+ use codex_mcp::resolve_oauth_scopes;
+ use codex_memories_write::clear_memory_roots_contents;
+ use codex_model_provider::create_model_provider;
+-use codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets;
+ use codex_protocol::ThreadId;
+ use codex_protocol::config_types::CollaborationMode;
+ use codex_protocol::config_types::ForcedLoginMethod;
+@@ -610,7 +609,8 @@ fn resolve_turn_environment_selections(
+         let environment_id = environment.environment_id;
+         let cwd = environment
+             .cwd
+-            .to_inferred_path_uri()
++            .infer_absolute_path_convention()
++            .and_then(|convention| environment.cwd.to_path_uri(convention).ok())
+             .ok_or_else(|| {
+                 invalid_request(format!(
+                     "invalid cwd for environment `{environment_id}`: path `{}` does not use absolute POSIX or Windows path syntax",
+diff --git a/codex-rs/app-server/src/request_processors/catalog_processor.rs b/codex-rs/app-server/src/request_processors/catalog_processor.rs
+index 1598ec48e98dab3904279d698f4f2a3f361ff030..de34453a51f66790f5edd1b1eaccb5bfd50cf7a8 100644
+--- a/codex-rs/app-server/src/request_processors/catalog_processor.rs
++++ b/codex-rs/app-server/src/request_processors/catalog_processor.rs
+@@ -1,6 +1,7 @@
+ use super::*;
+ use codex_core::config::permission_profile_catalog;
+ use codex_hooks::HookListEntryHandler;
++use codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets_with_overrides;
+ use futures::StreamExt;
+ 
+ #[derive(Clone)]
+@@ -205,7 +206,7 @@ impl CatalogRequestProcessor {
+         &self,
+         params: CollaborationModeListParams,
+     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+-        Self::list_collaboration_modes(self.thread_manager.clone(), params)
++        Self::list_collaboration_modes(self.config.clone(), params)
+             .await
+             .map(|response| Some(response.into()))
+     }
+@@ -320,15 +321,23 @@ impl CatalogRequestProcessor {
+     }
+ 
+     async fn list_collaboration_modes(
+-        thread_manager: Arc<ThreadManager>,
++        config: Arc<Config>,
+         params: CollaborationModeListParams,
+     ) -> Result<CollaborationModeListResponse, JSONRPCErrorError> {
+         let CollaborationModeListParams {} = params;
+-        let items = thread_manager
+-            .list_collaboration_modes()
+-            .into_iter()
+-            .map(Into::into)
+-            .collect();
++        let items = builtin_collaboration_mode_presets_with_overrides(
++            config
++                .instruction_overrides
++                .default_mode_instructions
++                .as_deref(),
++            config
++                .instruction_overrides
++                .plan_mode_instructions
++                .as_deref(),
++        )
++        .into_iter()
++        .map(Into::into)
++        .collect();
+         let response = CollaborationModeListResponse { data: items };
+         Ok(response)
+     }
+diff --git a/codex-rs/app-server/src/request_processors/turn_processor.rs b/codex-rs/app-server/src/request_processors/turn_processor.rs
+index 08de04ffba4d59dd2ea192f0a987fbc90845c95d..b0694da4cf178b04e1817b576ec1455cde8a2526 100644
+--- a/codex-rs/app-server/src/request_processors/turn_processor.rs
++++ b/codex-rs/app-server/src/request_processors/turn_processor.rs
+@@ -359,11 +359,20 @@ impl TurnRequestProcessor {
+         mut collaboration_mode: CollaborationMode,
+     ) -> CollaborationMode {
+         if collaboration_mode.settings.developer_instructions.is_none()
+-            && let Some(instructions) = builtin_collaboration_mode_presets()
+-                .into_iter()
+-                .find(|preset| preset.mode == Some(collaboration_mode.mode))
+-                .and_then(|preset| preset.developer_instructions.flatten())
+-                .filter(|instructions| !instructions.is_empty())
++            && let Some(instructions) = codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets_with_overrides(
++                self.config
++                    .instruction_overrides
++                    .default_mode_instructions
++                    .as_deref(),
++                self.config
++                    .instruction_overrides
++                    .plan_mode_instructions
++                    .as_deref(),
++            )
++            .into_iter()
++            .find(|preset| preset.mode == Some(collaboration_mode.mode))
++            .and_then(|preset| preset.developer_instructions.flatten())
++            .filter(|instructions| !instructions.is_empty())
+         {
+             collaboration_mode.settings.developer_instructions = Some(instructions);
+         }
+diff --git a/codex-rs/collaboration-mode-templates/templates/default.md b/codex-rs/collaboration-mode-templates/templates/default.md
+index 715982c396bb53b42e8165e613d0d5f1376f9b3d..e0d01bdbd4c2dd410490b4d8099e8bb837114b85 100644
+--- a/codex-rs/collaboration-mode-templates/templates/default.md
++++ b/codex-rs/collaboration-mode-templates/templates/default.md
+@@ -6,6 +6,13 @@ Your active mode changes only when new developer instructions with a different `
+ 
+ ## request_user_input availability
+ 
+-Use the `request_user_input` tool only when it is listed in the available tools for this turn.
++When the `request_user_input` tool is available in the current turn, prefer using
++it for decisions that materially change the plan or require information that
++cannot be discovered safely from local context.
+ 
+-In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions. If you absolutely must ask a question because the answer cannot be discovered from local context and a reasonable assumption would be risky, ask the user directly with a concise plain-text question. Never write a multiple choice question as a textual assistant message.
++In Default mode, strongly prefer making reasonable assumptions and executing the
++user's request rather than stopping to ask questions. If you absolutely must ask
++a question because the answer cannot be discovered from local context and a
++reasonable assumption would be risky, prefer using the `request_user_input` tool
++rather than writing a multiple choice question as a textual assistant message.
++Never write a multiple choice question as a textual assistant message.
+diff --git a/codex-rs/collaboration-mode-templates/templates/plan.md b/codex-rs/collaboration-mode-templates/templates/plan.md
+index ca68f41c897db9eec0fb484659b0be59cb92d238..3e111bb1a307ae060c5a14cd0fb9f054bc3b42bb 100644
+--- a/codex-rs/collaboration-mode-templates/templates/plan.md
++++ b/codex-rs/collaboration-mode-templates/templates/plan.md
+@@ -27,11 +27,24 @@ Actions that gather truth, reduce ambiguity, or validate feasibility without cha
+ * Dry-run style commands when they do not edit repo-tracked files
+ * Tests, builds, or checks that may write to caches or build artifacts (for example, `target/`, `.cache/`, or snapshots) so long as they do not edit repo-tracked files
+ 
++### Allowed final plan artifact
++
++Writing the final plan Markdown file is the only permitted file mutation in Plan Mode.
++
++When the plan is decision complete:
++
++* Write the authoritative plan to a Markdown file before the final response.
++* Use a plan-specific path under the current workspace, preferably `plans/<short-descriptive-slug>.md`, unless the user or repository provides a more specific planning location.
++* Validate that the target path stays inside the workspace and ends in `.md`.
++* Do not overwrite an existing plan file unless the user explicitly asked to update that exact file; choose a new descriptive filename instead.
++* Put the complete implementation-ready plan in the Markdown file.
++
+ ### Not allowed (mutating, plan-executing)
+ 
+ Actions that implement the plan or change repo-tracked state. Examples:
+ 
+ * Editing or writing files
++* Editing or writing files other than the final plan Markdown artifact described above
+ * Running formatters or linters that rewrite files
+ * Applying patches, migrations, or codegen that updates repo-tracked files
+ * Side-effectful commands whose purpose is to carry out the plan rather than refine it
+@@ -93,7 +106,7 @@ Use the `request_user_input` tool only for decisions that materially change the
+ 
+ Only output the final plan when it is decision complete and leaves no decisions to the implementer.
+ 
+-When you present the official plan, wrap it in a `<proposed_plan>` block so the client can render it specially:
++When you present the official plan, first write the complete plan to the Markdown file. Then wrap a short file-backed plan notice in a `<proposed_plan>` block so the client can render it specially:
+ 
+ 1) The opening tag must be on its own line.
+ 2) Start the plan content on the next line (no text on the same line as the tag).
+@@ -104,10 +117,12 @@ When you present the official plan, wrap it in a `<proposed_plan>` block so the
+ Example:
+ 
+ <proposed_plan>
+-plan content
++# Plan saved
++
++The implementation plan has been written to `plans/example.md`.
+ </proposed_plan>
+ 
+-plan content should be human and agent digestible. The final plan must be plan-only, concise by default, and include:
++The Markdown file content should be human and agent digestible. The final plan must be plan-only, concise by default, and include:
+ 
+ * A clear title
+ * A brief summary section
+diff --git a/codex-rs/config/src/config_toml.rs b/codex-rs/config/src/config_toml.rs
+index 20d64d21babc32cb927f5c81ca4f567ee57bda0c..218581ba4dd97c1239c30380b35c6e9e45620146 100644
+--- a/codex-rs/config/src/config_toml.rs
++++ b/codex-rs/config/src/config_toml.rs
+@@ -14,6 +14,7 @@ use crate::types::AppsConfigToml;
+ use crate::types::AuthCredentialsStoreMode;
+ use crate::types::FeedbackConfigToml;
+ use crate::types::History;
++use crate::types::InstructionOverridesToml;
+ use crate::types::MarketplaceConfig;
+ use crate::types::McpServerConfig;
+ use crate::types::MemoriesToml;
+@@ -238,6 +239,11 @@ pub struct ConfigToml {
+     /// sanctioned by Codex will likely degrade model performance.
+     pub model_instructions_file: Option<AbsolutePathBuf>,
+ 
++    /// Optional file-backed overrides for selected built-in instruction
++    /// snippets that do not already have first-class string config fields.
++    #[serde(default)]
++    pub instruction_overrides: Option<InstructionOverridesToml>,
++
+     /// Compact prompt used for history compaction.
+     pub compact_prompt: Option<String>,
+ 
+diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
+index c78ed6986784891d09e6c86d8a391d50d434a311..d650bcc1eb6a9d589624a0b4104c9ade256f0869 100644
+--- a/codex-rs/config/src/types.rs
++++ b/codex-rs/config/src/types.rs
+@@ -284,6 +284,89 @@ pub struct ToolSuggestConfig {
+     pub disabled_tools: Vec<ToolSuggestDisabledTool>,
+ }
+ 
++/// Optional file-backed overrides for built-in instruction snippets that do
++/// not already have first-class string config fields.
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverridesToml {
++    pub modes: Option<InstructionOverrideModesToml>,
++    pub permissions: Option<InstructionOverridePermissionsToml>,
++    pub review: Option<InstructionOverrideReviewToml>,
++    pub models: Option<InstructionOverrideModelsToml>,
++    pub agents: Option<InstructionOverrideAgentsToml>,
++    pub tools: Option<InstructionOverrideToolsToml>,
++    pub tui: Option<InstructionOverrideTuiToml>,
++    pub personality: Option<InstructionOverridePersonalityToml>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideModesToml {
++    pub default_instructions_file: Option<AbsolutePathBuf>,
++    pub plan_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverridePermissionsToml {
++    pub approval_policy_never_instructions_file: Option<AbsolutePathBuf>,
++    pub approval_policy_unless_trusted_instructions_file: Option<AbsolutePathBuf>,
++    pub approval_policy_on_failure_instructions_file: Option<AbsolutePathBuf>,
++    pub approval_policy_on_request_instructions_file: Option<AbsolutePathBuf>,
++    pub approval_policy_on_request_rule_request_permission_instructions_file:
++        Option<AbsolutePathBuf>,
++    pub sandbox_mode_danger_full_access_instructions_file: Option<AbsolutePathBuf>,
++    pub sandbox_mode_workspace_write_instructions_file: Option<AbsolutePathBuf>,
++    pub sandbox_mode_read_only_instructions_file: Option<AbsolutePathBuf>,
++    pub granular_intro_instructions_file: Option<AbsolutePathBuf>,
++    pub request_permissions_tool_instructions_file: Option<AbsolutePathBuf>,
++    pub auto_review_approval_suffix_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideReviewToml {
++    pub rubric_instructions_file: Option<AbsolutePathBuf>,
++    pub uncommitted_instructions_file: Option<AbsolutePathBuf>,
++    pub base_branch_instructions_file: Option<AbsolutePathBuf>,
++    pub base_branch_backup_instructions_file: Option<AbsolutePathBuf>,
++    pub commit_instructions_file: Option<AbsolutePathBuf>,
++    pub commit_with_title_instructions_file: Option<AbsolutePathBuf>,
++    pub exit_success_instructions_file: Option<AbsolutePathBuf>,
++    pub exit_interrupted_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideModelsToml {
++    pub base_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideAgentsToml {
++    pub hierarchical_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideToolsToml {
++    pub request_user_input_instructions_file: Option<AbsolutePathBuf>,
++    pub search_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverrideTuiToml {
++    pub init_instructions_file: Option<AbsolutePathBuf>,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
++#[schemars(deny_unknown_fields)]
++pub struct InstructionOverridePersonalityToml {
++    pub custom_instructions_file: Option<AbsolutePathBuf>,
++}
++
+ /// Memories settings loaded from config.toml.
+ #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
+ #[schemars(deny_unknown_fields)]
+diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
+index b32181c98865ecd30c989a4eb996f1e379c011e9..82fd1e5ed37b8d609dba4ec0e747d89ce34d56b4 100644
+--- a/codex-rs/core/src/config/config_tests.rs
++++ b/codex-rs/core/src/config/config_tests.rs
+@@ -352,6 +352,144 @@ async fn goal_max_token_budget_requires_positive_integer() {
+     }
+ }
+ 
++#[tokio::test]
++async fn instruction_override_files_load_into_effective_config() {
++    let temp = tempdir().expect("tempdir");
++    let codex_home = temp.path().abs();
++    let default_mode = temp.path().join("default-mode.md");
++    let plan_mode = temp.path().join("plan-mode.md");
++    let hierarchical = temp.path().join("hierarchical.md");
++    let init = temp.path().join("init.md");
++    let model_base = temp.path().join("model-base.md");
++    let permission_tool = temp.path().join("request-permissions-tool.md");
++    let review_mode = temp.path().join("review-mode.md");
++    let review_commit_with_title = temp.path().join("review-commit-with-title.md");
++    let custom_personality = temp.path().join("personality.md");
++    std::fs::write(&default_mode, "default mode override").expect("write default mode");
++    std::fs::write(&plan_mode, "plan mode override").expect("write plan mode");
++    std::fs::write(&hierarchical, "hierarchical override").expect("write hierarchical");
++    std::fs::write(&init, "init override").expect("write init");
++    std::fs::write(&model_base, "model base override").expect("write model base");
++    std::fs::write(&permission_tool, "request permissions tool override")
++        .expect("write permission tool");
++    std::fs::write(&review_mode, "review rubric override").expect("write review");
++    std::fs::write(
++        &review_commit_with_title,
++        "review commit {{ sha }} named {{ title }}",
++    )
++    .expect("write review commit with title");
++    std::fs::write(&custom_personality, "personality => {{ personality }}")
++        .expect("write personality");
++
++    let config_toml = toml::from_str::<ConfigToml>(&format!(
++        r#"
++[instruction_overrides.modes]
++default_instructions_file = "{}"
++plan_instructions_file = "{}"
++
++[instruction_overrides.agents]
++hierarchical_instructions_file = "{}"
++
++[instruction_overrides.tui]
++init_instructions_file = "{}"
++
++[instruction_overrides.models]
++base_instructions_file = "{}"
++
++[instruction_overrides.permissions]
++request_permissions_tool_instructions_file = "{}"
++
++[instruction_overrides.review]
++rubric_instructions_file = "{}"
++commit_with_title_instructions_file = "{}"
++
++[instruction_overrides.personality]
++custom_instructions_file = "{}"
++"#,
++        default_mode.display(),
++        plan_mode.display(),
++        hierarchical.display(),
++        init.display(),
++        model_base.display(),
++        permission_tool.display(),
++        review_mode.display(),
++        review_commit_with_title.display(),
++        custom_personality.display(),
++    ))
++    .expect("config should parse");
++
++    let config = Config::load_from_base_config_with_overrides(
++        config_toml,
++        ConfigOverrides::default(),
++        codex_home,
++    )
++    .await
++    .expect("load config");
++
++    assert_eq!(
++        config
++            .instruction_overrides
++            .default_mode_instructions
++            .as_deref(),
++        Some("default mode override")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .plan_mode_instructions
++            .as_deref(),
++        Some("plan mode override")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .hierarchical_agents_instructions
++            .as_deref(),
++        Some("hierarchical override")
++    );
++    assert_eq!(
++        config.instruction_overrides.init_instructions.as_deref(),
++        Some("init override")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .model_base_instructions
++            .as_deref(),
++        Some("model base override")
++    );
++    assert_eq!(
++        config.base_instructions.as_deref(),
++        Some("model base override")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .permissions
++            .request_permissions_tool
++            .as_deref(),
++        Some("request permissions tool override")
++    );
++    assert_eq!(
++        config.instruction_overrides.review_rubric.as_deref(),
++        Some("review rubric override")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .review_commit_with_title_instructions
++            .as_deref(),
++        Some("review commit {{ sha }} named {{ title }}")
++    );
++    assert_eq!(
++        config
++            .instruction_overrides
++            .custom_personality_instructions
++            .as_deref(),
++        Some("personality => {{ personality }}")
++    );
++}
++
+ #[test]
+ fn parses_bundled_skills_config() {
+     let cfg: ConfigToml = toml::from_str(
+diff --git a/codex-rs/core/src/config/instruction_overrides.rs b/codex-rs/core/src/config/instruction_overrides.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..0d78d77bddeabdbe3d163204e59983f32f930e5b
+--- /dev/null
++++ b/codex-rs/core/src/config/instruction_overrides.rs
+@@ -0,0 +1,280 @@
++use super::Config;
++use codex_config::types::InstructionOverridePermissionsToml;
++use codex_config::types::InstructionOverridesToml;
++use codex_exec_server::ExecutorFileSystem;
++use codex_prompts::PermissionsInstructionOverrides;
++use codex_utils_absolute_path::AbsolutePathBuf;
++use std::io;
++
++/// File-backed replacements for selected built-in instruction snippets.
++#[derive(Debug, Clone, Default, PartialEq, Eq)]
++pub struct InstructionOverrides {
++    pub default_mode_instructions: Option<String>,
++    pub plan_mode_instructions: Option<String>,
++    pub hierarchical_agents_instructions: Option<String>,
++    pub init_instructions: Option<String>,
++    pub model_base_instructions: Option<String>,
++    pub permissions: PermissionInstructionOverrides,
++    pub review_rubric: Option<String>,
++    pub review_uncommitted_instructions: Option<String>,
++    pub review_base_branch_instructions: Option<String>,
++    pub review_base_branch_backup_instructions: Option<String>,
++    pub review_commit_instructions: Option<String>,
++    pub review_commit_with_title_instructions: Option<String>,
++    pub review_exit_success_instructions: Option<String>,
++    pub review_exit_interrupted_instructions: Option<String>,
++    pub request_user_input_instructions: Option<String>,
++    pub search_tool_instructions: Option<String>,
++    pub custom_personality_instructions: Option<String>,
++}
++
++impl InstructionOverrides {
++    pub fn init_instructions(&self) -> Option<&str> {
++        self.init_instructions.as_deref()
++    }
++}
++
++/// File-backed replacements for permissions-related instruction snippets.
++#[derive(Debug, Clone, Default, PartialEq, Eq)]
++pub struct PermissionInstructionOverrides {
++    pub approval_policy_never: Option<String>,
++    pub approval_policy_unless_trusted: Option<String>,
++    pub approval_policy_on_failure: Option<String>,
++    pub approval_policy_on_request: Option<String>,
++    pub approval_policy_on_request_rule_request_permission: Option<String>,
++    pub sandbox_mode_danger_full_access: Option<String>,
++    pub sandbox_mode_workspace_write: Option<String>,
++    pub sandbox_mode_read_only: Option<String>,
++    pub granular_intro: Option<String>,
++    pub request_permissions_tool: Option<String>,
++    pub auto_review_approval_suffix: Option<String>,
++}
++
++impl PermissionInstructionOverrides {
++    pub fn as_prompt_overrides(&self) -> PermissionsInstructionOverrides<'_> {
++        PermissionsInstructionOverrides {
++            approval_policy_never: self.approval_policy_never.as_deref(),
++            approval_policy_unless_trusted: self.approval_policy_unless_trusted.as_deref(),
++            approval_policy_on_failure: self.approval_policy_on_failure.as_deref(),
++            approval_policy_on_request: self.approval_policy_on_request.as_deref(),
++            approval_policy_on_request_rule_request_permission: self
++                .approval_policy_on_request_rule_request_permission
++                .as_deref(),
++            sandbox_mode_danger_full_access: self.sandbox_mode_danger_full_access.as_deref(),
++            sandbox_mode_workspace_write: self.sandbox_mode_workspace_write.as_deref(),
++            sandbox_mode_read_only: self.sandbox_mode_read_only.as_deref(),
++            granular_intro: self.granular_intro.as_deref(),
++            request_permissions_tool: self.request_permissions_tool.as_deref(),
++            auto_review_approval_suffix: self.auto_review_approval_suffix.as_deref(),
++        }
++    }
++}
++
++pub(crate) async fn load_instruction_overrides(
++    fs: &dyn ExecutorFileSystem,
++    config: Option<&InstructionOverridesToml>,
++) -> io::Result<InstructionOverrides> {
++    let Some(config) = config else {
++        return Ok(InstructionOverrides::default());
++    };
++
++    let modes = config.modes.as_ref();
++    let review = config.review.as_ref();
++    let models = config.models.as_ref();
++    let agents = config.agents.as_ref();
++    let tools = config.tools.as_ref();
++    let tui = config.tui.as_ref();
++    let personality = config.personality.as_ref();
++
++    Ok(InstructionOverrides {
++        default_mode_instructions: read_override(
++            fs,
++            modes.and_then(|value| value.default_instructions_file.as_ref()),
++            "instruction_overrides.modes.default_instructions_file",
++        )
++        .await?,
++        plan_mode_instructions: read_override(
++            fs,
++            modes.and_then(|value| value.plan_instructions_file.as_ref()),
++            "instruction_overrides.modes.plan_instructions_file",
++        )
++        .await?,
++        hierarchical_agents_instructions: read_override(
++            fs,
++            agents.and_then(|value| value.hierarchical_instructions_file.as_ref()),
++            "instruction_overrides.agents.hierarchical_instructions_file",
++        )
++        .await?,
++        init_instructions: read_override(
++            fs,
++            tui.and_then(|value| value.init_instructions_file.as_ref()),
++            "instruction_overrides.tui.init_instructions_file",
++        )
++        .await?,
++        model_base_instructions: read_override(
++            fs,
++            models.and_then(|value| value.base_instructions_file.as_ref()),
++            "instruction_overrides.models.base_instructions_file",
++        )
++        .await?,
++        permissions: load_permission_instruction_overrides(fs, config.permissions.as_ref()).await?,
++        review_rubric: read_override(
++            fs,
++            review.and_then(|value| value.rubric_instructions_file.as_ref()),
++            "instruction_overrides.review.rubric_instructions_file",
++        )
++        .await?,
++        review_uncommitted_instructions: read_override(
++            fs,
++            review.and_then(|value| value.uncommitted_instructions_file.as_ref()),
++            "instruction_overrides.review.uncommitted_instructions_file",
++        )
++        .await?,
++        review_base_branch_instructions: read_override(
++            fs,
++            review.and_then(|value| value.base_branch_instructions_file.as_ref()),
++            "instruction_overrides.review.base_branch_instructions_file",
++        )
++        .await?,
++        review_base_branch_backup_instructions: read_override(
++            fs,
++            review.and_then(|value| value.base_branch_backup_instructions_file.as_ref()),
++            "instruction_overrides.review.base_branch_backup_instructions_file",
++        )
++        .await?,
++        review_commit_instructions: read_override(
++            fs,
++            review.and_then(|value| value.commit_instructions_file.as_ref()),
++            "instruction_overrides.review.commit_instructions_file",
++        )
++        .await?,
++        review_commit_with_title_instructions: read_override(
++            fs,
++            review.and_then(|value| value.commit_with_title_instructions_file.as_ref()),
++            "instruction_overrides.review.commit_with_title_instructions_file",
++        )
++        .await?,
++        review_exit_success_instructions: read_override(
++            fs,
++            review.and_then(|value| value.exit_success_instructions_file.as_ref()),
++            "instruction_overrides.review.exit_success_instructions_file",
++        )
++        .await?,
++        review_exit_interrupted_instructions: read_override(
++            fs,
++            review.and_then(|value| value.exit_interrupted_instructions_file.as_ref()),
++            "instruction_overrides.review.exit_interrupted_instructions_file",
++        )
++        .await?,
++        request_user_input_instructions: read_override(
++            fs,
++            tools.and_then(|value| value.request_user_input_instructions_file.as_ref()),
++            "instruction_overrides.tools.request_user_input_instructions_file",
++        )
++        .await?,
++        search_tool_instructions: read_override(
++            fs,
++            tools.and_then(|value| value.search_instructions_file.as_ref()),
++            "instruction_overrides.tools.search_instructions_file",
++        )
++        .await?,
++        custom_personality_instructions: read_override(
++            fs,
++            personality.and_then(|value| value.custom_instructions_file.as_ref()),
++            "instruction_overrides.personality.custom_instructions_file",
++        )
++        .await?,
++    })
++}
++
++async fn load_permission_instruction_overrides(
++    fs: &dyn ExecutorFileSystem,
++    config: Option<&InstructionOverridePermissionsToml>,
++) -> io::Result<PermissionInstructionOverrides> {
++    let Some(config) = config else {
++        return Ok(PermissionInstructionOverrides::default());
++    };
++
++    Ok(PermissionInstructionOverrides {
++        approval_policy_never: read_override(
++            fs,
++            config.approval_policy_never_instructions_file.as_ref(),
++            "instruction_overrides.permissions.approval_policy_never_instructions_file",
++        )
++        .await?,
++        approval_policy_unless_trusted: read_override(
++            fs,
++            config
++                .approval_policy_unless_trusted_instructions_file
++                .as_ref(),
++            "instruction_overrides.permissions.approval_policy_unless_trusted_instructions_file",
++        )
++        .await?,
++        approval_policy_on_failure: read_override(
++            fs,
++            config.approval_policy_on_failure_instructions_file.as_ref(),
++            "instruction_overrides.permissions.approval_policy_on_failure_instructions_file",
++        )
++        .await?,
++        approval_policy_on_request: read_override(
++            fs,
++            config.approval_policy_on_request_instructions_file.as_ref(),
++            "instruction_overrides.permissions.approval_policy_on_request_instructions_file",
++        )
++        .await?,
++        approval_policy_on_request_rule_request_permission: read_override(
++            fs,
++            config
++                .approval_policy_on_request_rule_request_permission_instructions_file
++                .as_ref(),
++            "instruction_overrides.permissions.approval_policy_on_request_rule_request_permission_instructions_file",
++        )
++        .await?,
++        sandbox_mode_danger_full_access: read_override(
++            fs,
++            config
++                .sandbox_mode_danger_full_access_instructions_file
++                .as_ref(),
++            "instruction_overrides.permissions.sandbox_mode_danger_full_access_instructions_file",
++        )
++        .await?,
++        sandbox_mode_workspace_write: read_override(
++            fs,
++            config.sandbox_mode_workspace_write_instructions_file.as_ref(),
++            "instruction_overrides.permissions.sandbox_mode_workspace_write_instructions_file",
++        )
++        .await?,
++        sandbox_mode_read_only: read_override(
++            fs,
++            config.sandbox_mode_read_only_instructions_file.as_ref(),
++            "instruction_overrides.permissions.sandbox_mode_read_only_instructions_file",
++        )
++        .await?,
++        granular_intro: read_override(
++            fs,
++            config.granular_intro_instructions_file.as_ref(),
++            "instruction_overrides.permissions.granular_intro_instructions_file",
++        )
++        .await?,
++        request_permissions_tool: read_override(
++            fs,
++            config.request_permissions_tool_instructions_file.as_ref(),
++            "instruction_overrides.permissions.request_permissions_tool_instructions_file",
++        )
++        .await?,
++        auto_review_approval_suffix: read_override(
++            fs,
++            config.auto_review_approval_suffix_instructions_file.as_ref(),
++            "instruction_overrides.permissions.auto_review_approval_suffix_instructions_file",
++        )
++        .await?,
++    })
++}
++
++async fn read_override(
++    fs: &dyn ExecutorFileSystem,
++    path: Option<&AbsolutePathBuf>,
++    context: &str,
++) -> io::Result<Option<String>> {
++    Config::try_read_non_empty_file(fs, path, context).await
++}
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+index 2361fea0cdc4fb581b091ef9ef60fed9a513ffb9..d523aaa8f90a5349487425b1c7f014d8d4fa88d4 100644
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -1,5 +1,7 @@
+ use crate::config::edit::ConfigEdit;
+ use crate::config::edit::ConfigEditsBuilder;
++use crate::config::instruction_overrides::InstructionOverrides;
++use crate::config::instruction_overrides::load_instruction_overrides;
+ use crate::guardian::BUNDLED_GUARDIAN_POLICY;
+ use crate::path_utils::normalize_for_native_workdir;
+ use crate::unified_exec::DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS;
+@@ -152,6 +154,7 @@ use toml_edit::DocumentMut;
+ pub(crate) mod agent_roles;
+ mod auth_keyring;
+ pub mod edit;
++mod instruction_overrides;
+ mod managed_features;
+ mod network_proxy_spec;
+ mod otel;
+@@ -631,6 +634,9 @@ pub struct Config {
+     /// Developer instructions override injected as a separate message.
+     pub developer_instructions: Option<String>,
+ 
++    /// File-backed overrides for selected built-in prompt snippets.
++    pub instruction_overrides: InstructionOverrides,
++
+     /// Guardian-specific policy config override from requirements.toml or config.toml.
+     /// This is inserted into the fixed guardian prompt template under the
+     /// `# Policy Configuration` section rather than replacing the whole
+@@ -3771,6 +3777,9 @@ impl Config {
+             }
+         });
+ 
++        let instruction_overrides =
++            load_instruction_overrides(fs, cfg.instruction_overrides.as_ref()).await?;
++
+         // Load base instructions override from a file if specified. If the
+         // path is relative, resolve it against the effective cwd so the
+         // behaviour matches other path-like config values.
+@@ -3783,6 +3792,7 @@ impl Config {
+         .await?;
+         let base_instructions = base_instructions
+             .or(file_base_instructions)
++            .or_else(|| instruction_overrides.model_base_instructions.clone())
+             .or(cfg.instructions.clone());
+         let base_instructions_provenance = base_instructions
+             .as_ref()
+@@ -3996,6 +4006,7 @@ impl Config {
+             base_instructions_provenance,
+             personality,
+             developer_instructions,
++            instruction_overrides,
+             compact_prompt,
+             include_permissions_instructions,
+             include_apps_instructions,
+diff --git a/codex-rs/core/src/context/world_state/permissions.rs b/codex-rs/core/src/context/world_state/permissions.rs
+index 00a690fc6014c2e10d0087d07c2e98d7e56d01bf..8a2fb5f8762e4137ace9f7ecbb5f90e18cbf02d4 100644
+--- a/codex-rs/core/src/context/world_state/permissions.rs
++++ b/codex-rs/core/src/context/world_state/permissions.rs
+@@ -6,6 +6,8 @@ use crate::context::ApprovedCommandPrefixSaved;
+ use crate::context::ContextualUserFragment;
+ use crate::context::PermissionsInstructions;
+ use codex_execpolicy::Policy;
++use codex_prompts::PermissionsInstructionFeatures;
++use codex_prompts::PermissionsInstructionOverrides;
+ use codex_protocol::models::PermissionProfile;
+ use codex_protocol::models::format_allow_prefixes;
+ use codex_protocol::protocol::AskForApproval;
+@@ -40,16 +42,20 @@ impl PermissionsState {
+         cwd: &Path,
+         exec_permission_approvals_enabled: bool,
+         request_permissions_tool_enabled: bool,
++        overrides: PermissionsInstructionOverrides<'_>,
+     ) -> Self {
+         let build_instructions = |exec_policy| {
+-            PermissionsInstructions::from_permission_profile(
++            PermissionsInstructions::from_permission_profile_with_overrides(
+                 permission_profile,
+                 approval_policy,
+                 approval_context,
+                 exec_policy,
+                 cwd,
+-                exec_permission_approvals_enabled,
+-                request_permissions_tool_enabled,
++                PermissionsInstructionFeatures {
++                    exec_permission_approvals_enabled,
++                    request_permissions_tool_enabled,
++                },
++                overrides,
+             )
+         };
+         let instructions = build_instructions(exec_policy);
+diff --git a/codex-rs/core/src/context/world_state/permissions_tests.rs b/codex-rs/core/src/context/world_state/permissions_tests.rs
+index 3f76ed934db75a76b5b523cfd6b4f2cff69be386..66fcd9c7e2ac57562f7ee861d546a0c1c9320f6d 100644
+--- a/codex-rs/core/src/context/world_state/permissions_tests.rs
++++ b/codex-rs/core/src/context/world_state/permissions_tests.rs
+@@ -233,6 +233,7 @@ fn permissions_state(
+         Path::new("/workspace"),
+         /*exec_permission_approvals_enabled*/ false,
+         /*request_permissions_tool_enabled*/ false,
++        PermissionsInstructionOverrides::default(),
+     )
+ }
+ 
+@@ -249,5 +250,6 @@ fn permissions_state_with_default_messages(exec_policy: &Policy) -> PermissionsS
+         Path::new("/workspace"),
+         /*exec_permission_approvals_enabled*/ false,
+         /*request_permissions_tool_enabled*/ false,
++        PermissionsInstructionOverrides::default(),
+     )
+ }
+diff --git a/codex-rs/core/src/lib.rs b/codex-rs/core/src/lib.rs
+index e8335a44865a9e0e2c4d2f35f4639329570030e7..e8d646bfbef123d935cec5f828d7adced861b9e1 100644
+--- a/codex-rs/core/src/lib.rs
++++ b/codex-rs/core/src/lib.rs
+@@ -100,7 +100,7 @@ pub mod windows_sandbox;
+ pub use client::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
+ pub use codex_protocol::config_types::ModelProviderAuthInfo;
+ mod event_mapping;
+-pub use codex_prompts as review_prompts;
++pub mod review_prompts;
+ mod thread_manager;
+ pub(crate) mod web_search;
+ pub(crate) mod windows_sandbox_read_grants;
+diff --git a/codex-rs/core/src/review_prompts.rs b/codex-rs/core/src/review_prompts.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ce71f99534a0d35e1fa03fe9476179b6f627f1e
+--- /dev/null
++++ b/codex-rs/core/src/review_prompts.rs
+@@ -0,0 +1,159 @@
++use crate::config::Config;
++use codex_git_utils::merge_base_with_head;
++pub use codex_prompts::ResolvedReviewRequest;
++pub use codex_prompts::user_facing_hint;
++use codex_protocol::protocol::ReviewRequest;
++use codex_protocol::protocol::ReviewTarget;
++use codex_utils_absolute_path::AbsolutePathBuf;
++use codex_utils_template::Template;
++use std::borrow::Cow;
++
++pub const DEFAULT_REVIEW_PROMPT: &str = codex_prompts::REVIEW_PROMPT;
++
++const UNCOMMITTED_PROMPT: &str = "Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.";
++const BASE_BRANCH_PROMPT_BACKUP: &str = "Review the code changes against the base branch '{{branch}}'. Start by finding the merge diff between the current branch and {{branch}}'s upstream e.g. (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"{{branch}}@{upstream}\")\"`), then run `git diff` against that SHA to see what changes we would merge into the {{branch}} branch. Provide prioritized, actionable findings.";
++const BASE_BRANCH_PROMPT: &str = "Review the code changes against the base branch '{{base_branch}}'. The merge base commit for this comparison is {{merge_base_sha}}. Run `git diff {{merge_base_sha}}` to inspect the changes relative to {{base_branch}}. Provide prioritized, actionable findings.";
++const COMMIT_PROMPT_WITH_TITLE: &str = "Review the code changes introduced by commit {{sha}} (\"{{title}}\"). Provide prioritized, actionable findings.";
++const COMMIT_PROMPT: &str = "Review the code changes introduced by commit {{sha}}. Provide prioritized, actionable findings.";
++
++pub fn review_rubric(config: &Config) -> String {
++    config
++        .instruction_overrides
++        .review_rubric
++        .clone()
++        .unwrap_or_else(|| DEFAULT_REVIEW_PROMPT.to_string())
++}
++
++pub fn render_review_exit_success(config: &Config, results: &str) -> String {
++    if let Some(template) = config
++        .instruction_overrides
++        .review_exit_success_instructions
++        .as_deref()
++    {
++        return render_review_template(
++            normalize_review_template_line_endings(template).as_ref(),
++            [("results", results)],
++            "review exit success",
++        );
++    }
++
++    codex_prompts::render_review_exit_success(results)
++}
++
++pub fn render_review_exit_interrupted(config: &Config) -> String {
++    config
++        .instruction_overrides
++        .review_exit_interrupted_instructions
++        .as_deref()
++        .map(normalize_review_template_line_endings)
++        .map(Cow::into_owned)
++        .unwrap_or_else(codex_prompts::render_review_exit_interrupted)
++}
++
++pub fn resolve_review_request(
++    request: ReviewRequest,
++    cwd: &AbsolutePathBuf,
++    config: &Config,
++) -> anyhow::Result<ResolvedReviewRequest> {
++    let target = request.target;
++    let prompt = review_prompt(&target, cwd, config)?;
++    let user_facing_hint = request
++        .user_facing_hint
++        .unwrap_or_else(|| user_facing_hint(&target));
++
++    Ok(ResolvedReviewRequest {
++        target,
++        prompt,
++        user_facing_hint,
++    })
++}
++
++pub fn review_prompt(
++    target: &ReviewTarget,
++    cwd: &AbsolutePathBuf,
++    config: &Config,
++) -> anyhow::Result<String> {
++    match target {
++        ReviewTarget::UncommittedChanges => Ok(config
++            .instruction_overrides
++            .review_uncommitted_instructions
++            .clone()
++            .unwrap_or_else(|| UNCOMMITTED_PROMPT.to_string())),
++        ReviewTarget::BaseBranch { branch } => {
++            if let Some(commit) = merge_base_with_head(cwd, branch)? {
++                Ok(render_review_template(
++                    config
++                        .instruction_overrides
++                        .review_base_branch_instructions
++                        .as_deref()
++                        .unwrap_or(BASE_BRANCH_PROMPT),
++                    [
++                        ("base_branch", branch.as_str()),
++                        ("merge_base_sha", commit.as_str()),
++                    ],
++                    "review base branch",
++                ))
++            } else {
++                Ok(render_review_template(
++                    config
++                        .instruction_overrides
++                        .review_base_branch_backup_instructions
++                        .as_deref()
++                        .unwrap_or(BASE_BRANCH_PROMPT_BACKUP),
++                    [("branch", branch.as_str())],
++                    "review base branch backup",
++                ))
++            }
++        }
++        ReviewTarget::Commit { sha, title } => {
++            if let Some(title) = title {
++                Ok(render_review_template(
++                    config
++                        .instruction_overrides
++                        .review_commit_with_title_instructions
++                        .as_deref()
++                        .unwrap_or(COMMIT_PROMPT_WITH_TITLE),
++                    [("sha", sha.as_str()), ("title", title.as_str())],
++                    "review commit with title",
++                ))
++            } else {
++                Ok(render_review_template(
++                    config
++                        .instruction_overrides
++                        .review_commit_instructions
++                        .as_deref()
++                        .unwrap_or(COMMIT_PROMPT),
++                    [("sha", sha.as_str())],
++                    "review commit",
++                ))
++            }
++        }
++        ReviewTarget::Custom { instructions } => {
++            let prompt = instructions.trim();
++            if prompt.is_empty() {
++                anyhow::bail!("Review prompt cannot be empty");
++            }
++            Ok(prompt.to_string())
++        }
++    }
++}
++
++fn render_review_template<'a, const N: usize>(
++    template_text: &str,
++    variables: [(&'a str, &'a str); N],
++    context: &str,
++) -> String {
++    let template = Template::parse(template_text)
++        .unwrap_or_else(|err| panic!("{context} template must parse: {err}"));
++    template
++        .render(variables)
++        .unwrap_or_else(|err| panic!("{context} template must render: {err}"))
++}
++
++fn normalize_review_template_line_endings(template: &str) -> Cow<'_, str> {
++    if template.contains('\r') {
++        Cow::Owned(template.replace("\r\n", "\n").replace('\r', "\n"))
++    } else {
++        Cow::Borrowed(template)
++    }
++}
+diff --git a/codex-rs/core/src/session/handlers.rs b/codex-rs/core/src/session/handlers.rs
+index a928090cc82eae3368030172e36b938c9422d5c3..a9e339dd522ab5b00fd4b780f5662bfd8bf84c68 100644
+--- a/codex-rs/core/src/session/handlers.rs
++++ b/codex-rs/core/src/session/handlers.rs
+@@ -488,7 +488,11 @@ pub async fn review(
+     sess.maybe_emit_model_warnings_for_turn(turn_context.as_ref())
+         .await;
+     #[allow(deprecated)]
+-    match resolve_review_request(review_request, &turn_context.cwd) {
++    match resolve_review_request(
++        review_request,
++        &turn_context.cwd,
++        turn_context.config.as_ref(),
++    ) {
+         Ok(resolved) => {
+             spawn_review_thread(
+                 Arc::clone(sess),
+diff --git a/codex-rs/core/src/session/tests.rs b/codex-rs/core/src/session/tests.rs
+index 3005aae73660df7fac0bdebc0eb70ecdb839f98d..e4662f18373834a600ec88a2a75ab1076860a6fc 100644
+--- a/codex-rs/core/src/session/tests.rs
++++ b/codex-rs/core/src/session/tests.rs
+@@ -6665,7 +6665,7 @@ async fn request_permissions_tool_resolves_relative_paths_against_selected_envir
+         ));
+ 
+     let call_id = "call-1".to_string();
+-    let handler = RequestPermissionsHandler;
++    let handler = RequestPermissionsHandler::default();
+     let tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
+     let step_context = StepContext::for_test(Arc::clone(&turn_context));
+     let handle = tokio::spawn({
+@@ -6753,7 +6753,7 @@ async fn request_permissions_tool_rejects_unknown_environment_id() {
+     let (session, turn_context) = make_session_and_context().await;
+     let turn_context = Arc::new(turn_context);
+     let step_context = StepContext::for_test(Arc::clone(&turn_context));
+-    let result = RequestPermissionsHandler
++    let result = RequestPermissionsHandler::default()
+         .handle(ToolInvocation {
+             session: Arc::new(session),
+             step_context,
+diff --git a/codex-rs/core/src/session/world_state.rs b/codex-rs/core/src/session/world_state.rs
+index 532a925fd9e50932e6bfc14806a158cb5f509efc..b9e8eed9a482781c4419c71b9ff904ee271b61f3 100644
+--- a/codex-rs/core/src/session/world_state.rs
++++ b/codex-rs/core/src/session/world_state.rs
+@@ -78,16 +78,29 @@ impl Session {
+         world_state.add_section(ModelInstructionsState::new(
+             &turn_context.model_info.slug,
+             previous_model.as_deref(),
+-            model_instructions,
++            if turn_context.config.base_instructions.is_some() {
++                String::new()
++            } else {
++                model_instructions
++            },
+         ));
+         if self.features.enabled(Feature::Personality) {
+             let personality_instructions = turn_context.personality.and_then(|personality| {
+-                turn_context
+-                    .model_info
+-                    .model_messages
+-                    .as_ref()
+-                    .and_then(|messages| messages.get_personality_message(Some(personality)))
+-                    .filter(|message| !message.is_empty())
++                if let Some(template) = turn_context
++                    .config
++                    .instruction_overrides
++                    .custom_personality_instructions
++                    .as_deref()
++                {
++                    Some(template.replace("{{ personality }}", &personality.to_string()))
++                } else {
++                    turn_context
++                        .model_info
++                        .model_messages
++                        .as_ref()
++                        .and_then(|messages| messages.get_personality_message(Some(personality)))
++                        .filter(|message| !message.is_empty())
++                }
+             });
+             world_state.add_section(PersonalityState::new(
+                 &turn_context.model_info.slug,
+@@ -184,6 +197,11 @@ impl Session {
+                     .config
+                     .features
+                     .enabled(Feature::RequestPermissionsTool),
++                turn_context
++                    .config
++                    .instruction_overrides
++                    .permissions
++                    .as_prompt_overrides(),
+             ));
+         } else {
+             world_state.add_section(CompactPermissionsState::new(exec_policy.as_ref()));
+diff --git a/codex-rs/core/src/tasks/review.rs b/codex-rs/core/src/tasks/review.rs
+index 94859375dd53f8dfeedb8b66302c11f0968fec7a..55c913479daa90c1ac042f7cc3f009d0374330cf 100644
+--- a/codex-rs/core/src/tasks/review.rs
++++ b/codex-rs/core/src/tasks/review.rs
+@@ -1,7 +1,5 @@
+ use std::sync::Arc;
+ 
+-use codex_prompts::render_review_exit_interrupted;
+-use codex_prompts::render_review_exit_success;
+ use codex_protocol::ResponseItemId;
+ use codex_protocol::config_types::WebSearchMode;
+ use codex_protocol::items::ExitedReviewModeItem;
+@@ -114,7 +112,8 @@ async fn start_review_conversation(
+     let _ = sub_agent_config.features.disable(Feature::MultiAgentV2);
+ 
+     // Set explicit review rubric for the sub-agent
+-    sub_agent_config.base_instructions = Some(crate::REVIEW_PROMPT.to_string());
++    sub_agent_config.base_instructions =
++        Some(crate::review_prompts::review_rubric(config.as_ref()));
+     sub_agent_config.base_instructions_provenance = Some(BaseInstructionsProvenance::Custom);
+     sub_agent_config.permissions.approval_policy = Constrained::allow_only(AskForApproval::Never);
+ 
+@@ -222,11 +221,12 @@ pub(crate) async fn exit_review_mode(
+             let block = format_review_findings_block(&out.findings, /*selection*/ None);
+             findings_str.push_str(&format!("\n{block}"));
+         }
+-        let rendered = render_review_exit_success(&findings_str);
++        let rendered =
++            crate::review_prompts::render_review_exit_success(ctx.config.as_ref(), &findings_str);
+         let assistant_message = render_review_output_text(&out);
+         (rendered, assistant_message)
+     } else {
+-        let rendered = render_review_exit_interrupted();
++        let rendered = crate::review_prompts::render_review_exit_interrupted(ctx.config.as_ref());
+         let assistant_message =
+             "Review was interrupted. Please re-run /review and wait for it to complete."
+                 .to_string();
+diff --git a/codex-rs/core/src/tools/handlers/request_permissions.rs b/codex-rs/core/src/tools/handlers/request_permissions.rs
+index 4d66985cb77340eb8374d02602a2d71b1d0338df..9277d42b5123635faf164e824cb1826da94b8a8b 100644
+--- a/codex-rs/core/src/tools/handlers/request_permissions.rs
++++ b/codex-rs/core/src/tools/handlers/request_permissions.rs
+@@ -17,7 +17,10 @@ use codex_tools::ToolName;
+ use codex_tools::ToolSpec;
+ use serde::Deserialize;
+ 
+-pub struct RequestPermissionsHandler;
++#[derive(Default)]
++pub struct RequestPermissionsHandler {
++    pub description_override: Option<String>,
++}
+ 
+ #[derive(Deserialize)]
+ struct RequestPermissionsEnvironmentArgs {
+@@ -31,7 +34,11 @@ impl ToolExecutor<ToolInvocation> for RequestPermissionsHandler {
+     }
+ 
+     fn spec(&self) -> ToolSpec {
+-        create_request_permissions_tool(request_permissions_tool_description())
++        create_request_permissions_tool(
++            self.description_override
++                .clone()
++                .unwrap_or_else(request_permissions_tool_description),
++        )
+     }
+ 
+     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+@@ -120,3 +127,7 @@ impl RequestPermissionsHandler {
+ }
+ 
+ impl CoreToolRuntime for RequestPermissionsHandler {}
++
++#[cfg(test)]
++#[path = "request_permissions_tests.rs"]
++mod tests;
+diff --git a/codex-rs/core/src/tools/handlers/request_permissions_tests.rs b/codex-rs/core/src/tools/handlers/request_permissions_tests.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..9028e2c7d753cc57e5cfdde9118001174661a825
+--- /dev/null
++++ b/codex-rs/core/src/tools/handlers/request_permissions_tests.rs
+@@ -0,0 +1,15 @@
++use super::*;
++use crate::tools::handlers::shell_spec::create_request_permissions_tool;
++use pretty_assertions::assert_eq;
++
++#[test]
++fn request_permissions_handler_uses_description_override() {
++    let handler = RequestPermissionsHandler {
++        description_override: Some("custom request permissions text".to_string()),
++    };
++
++    assert_eq!(
++        handler.spec(),
++        create_request_permissions_tool("custom request permissions text".to_string())
++    );
++}
+diff --git a/codex-rs/core/src/tools/handlers/request_user_input.rs b/codex-rs/core/src/tools/handlers/request_user_input.rs
+index 92e36fc668d6ef00eafa262778b3744229fbe96a..a84588aefcfcf3a6ef48f0a5e7670f573fc91dfb 100644
+--- a/codex-rs/core/src/tools/handlers/request_user_input.rs
++++ b/codex-rs/core/src/tools/handlers/request_user_input.rs
+@@ -19,6 +19,7 @@ use codex_tools::ToolSpec;
+ 
+ pub struct RequestUserInputHandler {
+     pub available_modes: Vec<ModeKind>,
++    pub description_override: Option<String>,
+ }
+ 
+ impl ToolExecutor<ToolInvocation> for RequestUserInputHandler {
+@@ -27,7 +28,11 @@ impl ToolExecutor<ToolInvocation> for RequestUserInputHandler {
+     }
+ 
+     fn spec(&self) -> ToolSpec {
+-        create_request_user_input_tool(request_user_input_tool_description(&self.available_modes))
++        create_request_user_input_tool(
++            self.description_override
++                .clone()
++                .unwrap_or_else(|| request_user_input_tool_description(&self.available_modes)),
++        )
+     }
+ 
+     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+diff --git a/codex-rs/core/src/tools/handlers/request_user_input_tests.rs b/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
+index ce213e392e56f1fd4fd90fd16e95996b9d492250..ffbd3616ad76d92af637986edef01348f803d7b7 100644
+--- a/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
++++ b/codex-rs/core/src/tools/handlers/request_user_input_tests.rs
+@@ -31,6 +31,7 @@ async fn multi_agent_v2_request_user_input_rejects_subagent_threads() {
+ 
+     let result = RequestUserInputHandler {
+         available_modes: Vec::new(),
++        description_override: None,
+     }
+     .handle(ToolInvocation {
+         session: Arc::new(session),
+@@ -86,6 +87,7 @@ async fn request_user_input_sets_non_blocking_outside_plan_mode() {
+         async move {
+             RequestUserInputHandler {
+                 available_modes: vec![ModeKind::Default],
++                description_override: None,
+             }
+             .handle(ToolInvocation {
+                 session,
+@@ -157,6 +159,7 @@ async fn request_user_input_sets_blocking_from_turn_mode() {
+         async move {
+             RequestUserInputHandler {
+                 available_modes: vec![ModeKind::Plan],
++                description_override: None,
+             }
+             .handle(ToolInvocation {
+                 session,
+diff --git a/codex-rs/core/src/tools/handlers/tool_search.rs b/codex-rs/core/src/tools/handlers/tool_search.rs
+index 15c2292c7603d7576a2ffec3f982710f416179ef..2b040593c97cd236dceca9b340d85b0ff1ed62cd 100644
+--- a/codex-rs/core/src/tools/handlers/tool_search.rs
++++ b/codex-rs/core/src/tools/handlers/tool_search.rs
+@@ -28,6 +28,7 @@ use tracing::instrument;
+ pub struct ToolSearchHandler {
+     search_infos: Vec<ToolSearchInfo>,
+     source_listing: ToolSearchSourceListing,
++    description_override: Option<String>,
+     spec: ToolSpec,
+     search_engine: SearchEngine<usize>,
+ }
+@@ -53,6 +54,7 @@ impl ToolSearchHandlerCache {
+         &self,
+         registry: &ToolRegistry,
+         source_listing: ToolSearchSourceListing,
++        description_override: Option<String>,
+     ) -> Arc<ToolSearchHandler> {
+         let sources = registry
+             .entries()
+@@ -73,6 +75,7 @@ impl ToolSearchHandlerCache {
+             let cached = self.cached();
+             if let Some(cached) = cached.as_ref()
+                 && cached.handler.source_listing == source_listing
++                && cached.handler.description_override == description_override
+                 && Self::sources_match(&cached.sources, &sources)
+             {
+                 return Arc::clone(&cached.handler);
+@@ -89,10 +92,15 @@ impl ToolSearchHandlerCache {
+             })
+             .collect();
+ 
+-        let handler = Arc::new(ToolSearchHandler::new(search_infos, source_listing));
++        let handler = Arc::new(ToolSearchHandler::new(
++            search_infos,
++            source_listing,
++            description_override,
++        ));
+         let mut cached = self.cached();
+         if let Some(cached) = cached.as_ref()
+             && cached.handler.source_listing == source_listing
++            && cached.handler.description_override == handler.description_override
+             && Self::sources_match(&cached.sources, &sources)
+         {
+             return Arc::clone(&cached.handler);
+@@ -138,6 +146,7 @@ impl ToolSearchHandler {
+     pub(crate) fn new(
+         search_infos: Vec<ToolSearchInfo>,
+         source_listing: ToolSearchSourceListing,
++        description_override: Option<String>,
+     ) -> Self {
+         let search_source_infos = search_infos
+             .iter()
+@@ -147,6 +156,7 @@ impl ToolSearchHandler {
+             &search_source_infos,
+             TOOL_SEARCH_DEFAULT_LIMIT,
+             source_listing,
++            description_override.clone(),
+         );
+         let documents: Vec<Document<usize>> = search_infos
+             .iter()
+@@ -160,6 +170,7 @@ impl ToolSearchHandler {
+         Self {
+             search_infos,
+             source_listing,
++            description_override,
+             spec,
+             search_engine,
+         }
+@@ -278,11 +289,23 @@ mod tests {
+         let mut registry = ToolRegistry::default();
+         registry.register_trusted_with_exposure(Arc::clone(&runtime), ToolExposure::Deferred);
+ 
+-        let first = cache.get_or_build(&registry, ToolSearchSourceListing::Include);
+-        let second = cache.get_or_build(&registry, ToolSearchSourceListing::Include);
++        let first = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
++        let second = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         assert!(Arc::ptr_eq(&first, &second));
+ 
+-        let without_sources = cache.get_or_build(&registry, ToolSearchSourceListing::Omit);
++        let without_sources = cache.get_or_build(
++            &registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&first, &without_sources));
+ 
+         let mut replacement_registry = ToolRegistry::default();
+@@ -291,12 +314,20 @@ mod tests {
+                 .expect("replacement MCP tool should convert"),
+         );
+         replacement_registry.register_trusted_with_exposure(replacement, ToolExposure::Deferred);
+-        let replacement = cache.get_or_build(&replacement_registry, ToolSearchSourceListing::Omit);
++        let replacement = cache.get_or_build(
++            &replacement_registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&without_sources, &replacement));
+ 
+         let mut disabled_registry = ToolRegistry::default();
+         disabled_registry.register_trusted_with_exposure(runtime, ToolExposure::Direct);
+-        let disabled = cache.get_or_build(&disabled_registry, ToolSearchSourceListing::Omit);
++        let disabled = cache.get_or_build(
++            &disabled_registry,
++            ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&replacement, &disabled));
+         assert!(disabled.search_infos.is_empty());
+     }
+@@ -322,7 +353,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let first = cache.get_or_build(&first_registry, ToolSearchSourceListing::Include);
++        let first = cache.get_or_build(
++            &first_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+ 
+         let mut equivalent_registry = ToolRegistry::default();
+         equivalent_registry
+@@ -331,7 +366,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let equivalent = cache.get_or_build(&equivalent_registry, ToolSearchSourceListing::Include);
++        let equivalent = cache.get_or_build(
++            &equivalent_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         assert!(Arc::ptr_eq(&first, &equivalent));
+ 
+         dynamic_tool.description = "Search refreshed records".to_string();
+@@ -341,7 +380,11 @@ mod tests {
+             Arc::new(DynamicToolHandler::new(&dynamic_tool).expect("dynamic tool should convert")),
+             ToolExposure::Deferred,
+         );
+-        let refreshed = cache.get_or_build(&refreshed_registry, ToolSearchSourceListing::Include);
++        let refreshed = cache.get_or_build(
++            &refreshed_registry,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         assert!(!Arc::ptr_eq(&first, &refreshed));
+         assert!(
+             refreshed.search_infos[1]
+@@ -390,7 +433,11 @@ mod tests {
+                 .search_info()
+                 .expect("dynamic handler should return search info")
+         }));
+-        let handler = ToolSearchHandler::new(search_infos, ToolSearchSourceListing::Include);
++        let handler = ToolSearchHandler::new(
++            search_infos,
++            ToolSearchSourceListing::Include,
++            /*description_override*/ None,
++        );
+         let results = [
+             &handler.search_infos[0].entry,
+             &handler.search_infos[2].entry,
+diff --git a/codex-rs/core/src/tools/handlers/tool_search_spec.rs b/codex-rs/core/src/tools/handlers/tool_search_spec.rs
+index c607ae0762be2b08c3b95d169a7e77285ffb6e1c..f529972aa90d196b75a70ea8987f48aa340c27bc 100644
+--- a/codex-rs/core/src/tools/handlers/tool_search_spec.rs
++++ b/codex-rs/core/src/tools/handlers/tool_search_spec.rs
+@@ -17,6 +17,7 @@ pub(crate) fn create_tool_search_tool(
+     searchable_sources: &[ToolSearchSourceInfo],
+     default_limit: usize,
+     source_listing: ToolSearchSourceListing,
++    description_override: Option<String>,
+ ) -> ToolSpec {
+     let properties = BTreeMap::from([
+         (
+@@ -90,9 +91,11 @@ pub(crate) fn create_tool_search_tool(
+         ToolSearchSourceListing::Omit => "\n\n".to_string(),
+     };
+ 
+-    let description = format!(
+-        "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.{source_section}Some of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
+-    );
++    let description = description_override.unwrap_or_else(|| {
++        format!(
++            "# Tool discovery\n\nSearches over deferred tool metadata with BM25 and exposes matching tools for the next model call.{source_section}Some of the tools may not have been provided to you upfront, and you should use this tool (`{TOOL_SEARCH_TOOL_NAME}`) to search for the required tools. For MCP tool discovery, always use `{TOOL_SEARCH_TOOL_NAME}` instead of `list_mcp_resources` or `list_mcp_resource_templates`."
++        )
++    });
+ 
+     ToolSpec::ToolSearch {
+         execution: "client".to_string(),
+@@ -135,6 +138,7 @@ mod tests {
+                 ],
+                 /*default_limit*/ 8,
+                 ToolSearchSourceListing::Include,
++            /*description_override*/ None,
+             ),
+             ToolSpec::ToolSearch {
+                 execution: "client".to_string(),
+@@ -165,6 +169,7 @@ mod tests {
+             }],
+             /*default_limit*/ 8,
+             ToolSearchSourceListing::Omit,
++            /*description_override*/ None,
+         ) else {
+             panic!("expected tool search spec");
+         };
+@@ -187,6 +192,7 @@ mod tests {
+             &sources,
+             /*default_limit*/ 8,
+             ToolSearchSourceListing::Include,
++            /*description_override*/ None,
+         ) else {
+             panic!("expected tool search spec");
+         };
+diff --git a/codex-rs/core/src/tools/spec_plan.rs b/codex-rs/core/src/tools/spec_plan.rs
+index 3da01c002302594b4ee27778fa87b4bd9b9e338e..191ef40a8522c385f0fc48e32bfd0c468239426d 100644
+--- a/codex-rs/core/src/tools/spec_plan.rs
++++ b/codex-rs/core/src/tools/spec_plan.rs
+@@ -1056,13 +1056,25 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
+         registry.add_with_exposure(
+             RequestUserInputHandler {
+                 available_modes: request_user_input_available_modes(features),
++                description_override: turn_context
++                    .config
++                    .instruction_overrides
++                    .request_user_input_instructions
++                    .clone(),
+             },
+             ToolExposure::DirectModelOnly,
+         );
+     }
+ 
+     if environment_mode.has_environment() && features.enabled(Feature::RequestPermissionsTool) {
+-        registry.add(RequestPermissionsHandler);
++        registry.add(RequestPermissionsHandler {
++            description_override: turn_context
++                .config
++                .instruction_overrides
++                .permissions
++                .request_permissions_tool
++                .clone(),
++        });
+     }
+ 
+     if features.enabled(Feature::TokenBudget) {
+@@ -1265,7 +1277,15 @@ fn append_tool_search_executor(
+     } else {
+         ToolSearchSourceListing::Include
+     };
+-    let handler = tool_search_handler_cache.get_or_build(registry, source_listing);
++    let handler = tool_search_handler_cache.get_or_build(
++        registry,
++        source_listing,
++        turn_context
++            .config
++            .instruction_overrides
++            .search_tool_instructions
++            .clone(),
++    );
+     registry.register_trusted(handler);
+ }
+ 
+diff --git a/codex-rs/models-manager/src/collaboration_mode_presets.rs b/codex-rs/models-manager/src/collaboration_mode_presets.rs
+index 72731c52d34a8151cc2825c5029d39ef0833605a..fe28e095f78e24c1347b4b7b1011ad64cd89b9bb 100644
+--- a/codex-rs/models-manager/src/collaboration_mode_presets.rs
++++ b/codex-rs/models-manager/src/collaboration_mode_presets.rs
+@@ -14,30 +14,48 @@ static COLLABORATION_MODE_DEFAULT_TEMPLATE: LazyLock<Template> = LazyLock::new(|
+ });
+ 
+ pub fn builtin_collaboration_mode_presets() -> Vec<CollaborationModeMask> {
+-    vec![plan_preset(), default_preset()]
++    builtin_collaboration_mode_presets_with_overrides(/*default*/ None, /*plan*/ None)
+ }
+ 
+-fn plan_preset() -> CollaborationModeMask {
++pub fn builtin_collaboration_mode_presets_with_overrides(
++    default_mode_instructions_override: Option<&str>,
++    plan_mode_instructions_override: Option<&str>,
++) -> Vec<CollaborationModeMask> {
++    vec![
++        plan_preset(plan_mode_instructions_override),
++        default_preset(default_mode_instructions_override),
++    ]
++}
++
++fn plan_preset(instructions_override: Option<&str>) -> CollaborationModeMask {
+     CollaborationModeMask {
+         name: ModeKind::Plan.display_name().to_string(),
+         mode: Some(ModeKind::Plan),
+         model: None,
+         reasoning_effort: Some(Some(ReasoningEffort::Medium)),
+-        developer_instructions: Some(Some(COLLABORATION_MODE_PLAN.to_string())),
++        developer_instructions: Some(Some(
++            instructions_override
++                .unwrap_or(COLLABORATION_MODE_PLAN)
++                .to_string(),
++        )),
+     }
+ }
+ 
+-fn default_preset() -> CollaborationModeMask {
++fn default_preset(instructions_override: Option<&str>) -> CollaborationModeMask {
+     CollaborationModeMask {
+         name: ModeKind::Default.display_name().to_string(),
+         mode: Some(ModeKind::Default),
+         model: None,
+         reasoning_effort: None,
+-        developer_instructions: Some(Some(default_mode_instructions())),
++        developer_instructions: Some(Some(default_mode_instructions(instructions_override))),
+     }
+ }
+ 
+-fn default_mode_instructions() -> String {
++fn default_mode_instructions(instructions_override: Option<&str>) -> String {
++    if let Some(instructions_override) = instructions_override {
++        return instructions_override.to_string();
++    }
++
+     let known_mode_names = format_mode_names(&TUI_VISIBLE_COLLABORATION_MODES);
+     COLLABORATION_MODE_DEFAULT_TEMPLATE
+         .render([(KNOWN_MODE_NAMES_TEMPLATE_KEY, known_mode_names.as_str())])
+diff --git a/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs b/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
+index 4e21d6d350d35672254f521dfe73f9d4f358479c..cd3c73effa6f395e0aedf56fc97a12c9e204bf13 100644
+--- a/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
++++ b/codex-rs/models-manager/src/collaboration_mode_presets_tests.rs
+@@ -3,20 +3,20 @@ use pretty_assertions::assert_eq;
+ 
+ #[test]
+ fn preset_names_use_mode_display_names() {
+-    assert_eq!(plan_preset().name, ModeKind::Plan.display_name());
+-    assert_eq!(default_preset().name, ModeKind::Default.display_name());
+-    assert_eq!(plan_preset().model, None);
++    assert_eq!(plan_preset(None).name, ModeKind::Plan.display_name());
++    assert_eq!(default_preset(None).name, ModeKind::Default.display_name());
++    assert_eq!(plan_preset(None).model, None);
+     assert_eq!(
+-        plan_preset().reasoning_effort,
++        plan_preset(None).reasoning_effort,
+         Some(Some(ReasoningEffort::Medium))
+     );
+-    assert_eq!(default_preset().model, None);
+-    assert_eq!(default_preset().reasoning_effort, None);
++    assert_eq!(default_preset(None).model, None);
++    assert_eq!(default_preset(None).reasoning_effort, None);
+ }
+ 
+ #[test]
+ fn default_mode_instructions_replace_mode_names_placeholder() {
+-    let default_instructions = default_preset()
++    let default_instructions = default_preset(None)
+         .developer_instructions
+         .expect("default preset should include instructions")
+         .expect("default instructions should be set");
+@@ -34,3 +34,25 @@ fn default_mode_instructions_replace_mode_names_placeholder() {
+         default_instructions.contains("ask the user directly with a concise plain-text question")
+     );
+ }
++
++#[test]
++fn collaboration_mode_instruction_overrides_replace_builtin_prompts() {
++    let presets = builtin_collaboration_mode_presets_with_overrides(
++        Some("default override"),
++        Some("plan override"),
++    );
++
++    let default_instructions = presets
++        .iter()
++        .find(|preset| preset.mode == Some(ModeKind::Default))
++        .and_then(|preset| preset.developer_instructions.clone())
++        .flatten();
++    let plan_instructions = presets
++        .iter()
++        .find(|preset| preset.mode == Some(ModeKind::Plan))
++        .and_then(|preset| preset.developer_instructions.clone())
++        .flatten();
++
++    assert_eq!(default_instructions.as_deref(), Some("default override"));
++    assert_eq!(plan_instructions.as_deref(), Some("plan override"));
++}
+diff --git a/codex-rs/thread-manager-sample/src/main.rs b/codex-rs/thread-manager-sample/src/main.rs
+index f01bc12251f5a58f0707596854fc6577743eb3a2..86ff61603ddd8fbc497f386853d2130667ed7b1f 100644
+--- a/codex-rs/thread-manager-sample/src/main.rs
++++ b/codex-rs/thread-manager-sample/src/main.rs
+@@ -210,6 +210,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
+         base_instructions: None,
+         base_instructions_provenance: None,
+         developer_instructions: None,
++        instruction_overrides: Default::default(),
+         guardian_policy_config: None,
+         include_permissions_instructions: false,
+         include_apps_instructions: false,

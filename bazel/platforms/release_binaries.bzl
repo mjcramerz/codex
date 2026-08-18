@@ -2,6 +2,10 @@
 
 load("@rules_platform//platform_data:defs.bzl", "platform_data")
 
+PLATFORM_TARGETS = {
+    "linux_amd64_gnu": "@llvm//platforms:linux_amd64",
+}
+
 PLATFORMS = [
     "linux_arm64_musl",
     "linux_amd64_musl",
@@ -11,13 +15,20 @@ PLATFORMS = [
     "windows_arm64",
 ]
 
+def platform_binary(name, target, platform):
+    platform_data(
+        name = name,
+        platform = PLATFORM_TARGETS.get(platform, "@llvm//platforms:" + platform),
+        target = target,
+        tags = ["manual"],
+    )
+
 def multiplatform_binaries(name, platforms = PLATFORMS):
     for platform in platforms:
-        platform_data(
+        platform_binary(
             name = name + "_" + platform,
-            platform = "@llvm//platforms:" + platform,
             target = name,
-            tags = ["manual"],
+            platform = platform,
         )
 
     native.filegroup(

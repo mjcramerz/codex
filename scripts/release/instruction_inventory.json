@@ -1,0 +1,585 @@
+{
+  "override_assets": [
+    {
+      "target": "modes/default.md",
+      "kind": "file",
+      "source": "codex-rs/collaboration-mode-templates/templates/default.md",
+      "replacements": [
+        [
+          "{{KNOWN_MODE_NAMES}}",
+          "Default and Plan"
+        ]
+      ],
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "modes",
+            "default_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "modes/plan.md",
+      "kind": "file",
+      "source": "codex-rs/collaboration-mode-templates/templates/plan.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "modes",
+            "plan_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/approval_policy/never.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/approval_policy/never.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "approval_policy_never_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/approval_policy/unless_trusted.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/approval_policy/unless_trusted.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "approval_policy_unless_trusted_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/approval_policy/on_failure.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/approval_policy/on_request.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "approval_policy_on_failure_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/approval_policy/on_request.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/approval_policy/on_request.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "approval_policy_on_request_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/approval_policy/on_request_rule_request_permission.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/approval_policy/on_request_rule_request_permission.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "approval_policy_on_request_rule_request_permission_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/sandbox_mode/danger_full_access.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/sandbox_mode/danger_full_access.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "sandbox_mode_danger_full_access_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/sandbox_mode/workspace_write.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/sandbox_mode/workspace_write.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "sandbox_mode_workspace_write_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/sandbox_mode/read_only.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/permissions/sandbox_mode/read_only.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "sandbox_mode_read_only_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/granular_intro.md",
+      "kind": "function",
+      "source": "codex-rs/prompts/src/permissions_instructions.rs",
+      "symbol": "granular_prompt_intro_text",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "granular_intro_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/request_permissions_tool.md",
+      "kind": "function",
+      "source": "codex-rs/core/src/tools/handlers/shell_spec.rs",
+      "symbol": "request_permissions_tool_description",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "request_permissions_tool_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "permissions/auto_review_suffix.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/permissions_instructions.rs",
+      "symbol": "AUTO_REVIEW_APPROVAL_SUFFIX",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "permissions",
+            "auto_review_approval_suffix_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/rubric.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/review/rubric.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "rubric_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/uncommitted.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/review_request.rs",
+      "symbol": "UNCOMMITTED_PROMPT",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "uncommitted_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/base_branch.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/review_request.rs",
+      "symbol": "BASE_BRANCH_PROMPT",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "base_branch_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/base_branch_backup.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/review_request.rs",
+      "symbol": "BASE_BRANCH_PROMPT_BACKUP",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "base_branch_backup_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/commit.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/review_request.rs",
+      "symbol": "COMMIT_PROMPT",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "commit_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/commit_with_title.md",
+      "kind": "const",
+      "source": "codex-rs/prompts/src/review_request.rs",
+      "symbol": "COMMIT_PROMPT_WITH_TITLE",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "commit_with_title_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/exit_success.xml",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/review/exit_success.xml",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "exit_success_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "review/exit_interrupted.xml",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/review/exit_interrupted.xml",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "review",
+            "exit_interrupted_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "models/base.md",
+      "kind": "file",
+      "source": "codex-rs/models-manager/prompt.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "models",
+            "base_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "models/model_instructions_template.md",
+      "kind": "file",
+      "source": "codex-rs/core/templates/model_instructions/gpt-5.2-codex_instructions_template.md",
+      "config_bindings": [
+        {
+          "path": [
+            "model_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "agents/hierarchical.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/agents/hierarchical.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "agents",
+            "hierarchical_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "tools/request_user_input.md",
+      "kind": "function",
+      "source": "codex-rs/core/src/tools/handlers/request_user_input_spec.rs",
+      "symbol": "request_user_input_tool_description",
+      "replacements": [
+        [
+          "{allowed_modes}",
+          "{{allowed_modes}}"
+        ]
+      ],
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "tools",
+            "request_user_input_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "tools/search.md",
+      "kind": "file",
+      "source": "codex-rs/core/templates/search_tool/tool_description.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "tools",
+            "search_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "tui/init.md",
+      "kind": "file",
+      "source": "codex-rs/tui/prompt_for_init_command.md",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "tui",
+            "init_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "personality/custom.md",
+      "kind": "generated",
+      "generated_key": "personality_custom",
+      "config_bindings": [
+        {
+          "path": [
+            "instruction_overrides",
+            "personality",
+            "custom_instructions_file"
+          ],
+          "kind": "file_path"
+        }
+      ]
+    },
+    {
+      "target": "compact/prompt.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/compact/prompt.md",
+      "config_bindings": [
+        {
+          "path": [
+            "experimental_compact_prompt_file"
+          ],
+          "kind": "file_path"
+        },
+        {
+          "path": [
+            "compact_prompt"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "root/instructions.md",
+      "kind": "generated",
+      "generated_key": "instructions",
+      "config_bindings": [
+        {
+          "path": [
+            "instructions"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "root/developer_instructions.md",
+      "kind": "generated",
+      "generated_key": "developer_instructions",
+      "config_bindings": [
+        {
+          "path": [
+            "developer_instructions"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "auto_review/policy.md",
+      "kind": "file",
+      "source": "codex-rs/core/src/guardian/policy.md",
+      "config_bindings": [
+        {
+          "path": [
+            "auto_review",
+            "policy"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "realtime/start_instructions.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/realtime/realtime_start.md",
+      "config_bindings": [
+        {
+          "path": [
+            "experimental_realtime_start_instructions"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "realtime/ws_backend_prompt.md",
+      "kind": "file",
+      "source": "codex-rs/prompts/templates/realtime/backend_prompt.md",
+      "config_bindings": [
+        {
+          "path": [
+            "experimental_realtime_ws_backend_prompt"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    },
+    {
+      "target": "realtime/ws_startup_context.md",
+      "kind": "generated",
+      "generated_key": "realtime_ws_startup_context",
+      "config_bindings": [
+        {
+          "path": [
+            "experimental_realtime_ws_startup_context"
+          ],
+          "kind": "inline_string"
+        }
+      ]
+    }
+  ],
+  "static_generated_assets": [
+    {
+      "target": "generated/personality/default_header.md",
+      "kind": "const",
+      "source": "codex-rs/models-manager/src/model_info.rs",
+      "symbol": "DEFAULT_PERSONALITY_HEADER"
+    },
+    {
+      "target": "generated/personality/friendly.md",
+      "kind": "const",
+      "source": "codex-rs/models-manager/src/model_info.rs",
+      "symbol": "LOCAL_FRIENDLY_TEMPLATE"
+    },
+    {
+      "target": "generated/personality/pragmatic.md",
+      "kind": "const",
+      "source": "codex-rs/models-manager/src/model_info.rs",
+      "symbol": "LOCAL_PRAGMATIC_TEMPLATE"
+    },
+    {
+      "target": "generated/permissions/request_permissions_tool_prompt_section.md",
+      "kind": "function",
+      "source": "codex-rs/prompts/src/permissions_instructions.rs",
+      "symbol": "request_permissions_tool_prompt_section"
+    },
+    {
+      "target": "guardian/output_contract.md",
+      "kind": "function",
+      "source": "codex-rs/core/src/guardian/prompt.rs",
+      "symbol": "guardian_output_contract_prompt"
+    },
+    {
+      "target": "guardian/rejection_instructions.md",
+      "kind": "const",
+      "source": "codex-rs/core/src/guardian/review.rs",
+      "symbol": "GUARDIAN_REJECTION_INSTRUCTIONS"
+    },
+    {
+      "target": "guardian/timeout_instructions.md",
+      "kind": "const",
+      "source": "codex-rs/core/src/guardian/review.rs",
+      "symbol": "GUARDIAN_TIMEOUT_INSTRUCTIONS"
+    }
+  ]
+}

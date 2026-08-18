@@ -1,0 +1,611 @@
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index 1a23f6f06..349c26797 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -2375,6 +2375,10 @@ impl App {
+             AppEvent::OpenReviewCustomPrompt => {
+                 self.chat_widget.show_review_custom_prompt();
+             }
++            AppEvent::SetComposerText { text } => {
++                self.chat_widget
++                    .set_composer_text(text, Vec::new(), Vec::new());
++            }
+             AppEvent::SubmitUserMessageWithMode {
+                 text,
+                 collaboration_mode,
+diff --git a/codex-rs/tui/src/app/startup.rs b/codex-rs/tui/src/app/startup.rs
+index 97d5bb697..84b6129f8 100644
+--- a/codex-rs/tui/src/app/startup.rs
++++ b/codex-rs/tui/src/app/startup.rs
+@@ -161,7 +161,16 @@ impl App {
+         if let Some(updated_model) = config.model.clone() {
+             model = updated_model;
+         }
+-        let model_catalog = Arc::new(ModelCatalog::new(available_models.clone()));
++        let model_catalog = Arc::new(ModelCatalog::with_collaboration_modes(
++            available_models.clone(),
++            codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets_with_overrides(
++                config
++                    .instruction_overrides
++                    .default_mode_instructions
++                    .as_deref(),
++                config.instruction_overrides.plan_mode_instructions.as_deref(),
++            ),
++        ));
+         let feedback_audience = bootstrap.feedback_audience;
+         let auth_mode = bootstrap.auth_mode;
+         let has_chatgpt_account = bootstrap.has_chatgpt_account;
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 6fde0759d..f3b1aaf24 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -1080,6 +1080,11 @@ pub(crate) enum AppEvent {
+     /// Open the custom prompt option from the review popup.
+     OpenReviewCustomPrompt,
+ 
++    /// Replace the composer text with the provided content.
++    SetComposerText {
++        text: String,
++    },
++
+     /// Submit a user message with an explicit collaboration mask.
+     SubmitUserMessageWithMode {
+         text: String,
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index 2e3127891..60b939e9a 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -1724,1 +1724,13 @@ impl ChatWidget {
++    /// Replace the composer content with the provided text and reset cursor.
++    pub(crate) fn set_composer_text(
++        &mut self,
++        text: String,
++        text_elements: Vec<TextElement>,
++        local_image_paths: Vec<PathBuf>,
++    ) {
++        self.bottom_pane
++            .set_composer_text(text, text_elements, local_image_paths);
++        self.refresh_plan_mode_nudge();
++    }
++
+     pub(crate) fn set_remote_image_urls(&mut self, remote_image_urls: Vec<String>) {
+diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index fafe2e079..3e5e2f107 100644
+--- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -14,6 +14,7 @@ use crate::bottom_pane::slash_commands::SlashCommandItem;
+ use crate::bottom_pane::slash_commands::find_slash_command;
+ use crate::goal_display::GOAL_USAGE;
+ use crate::goal_files::GoalDraft;
++use crate::prompt_files;
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ enum SlashCommandDispatchSource {
+@@ -126,6 +127,60 @@ impl ChatWidget {
+         self.request_side_conversation(parent_thread_id, /*user_message*/ None);
+     }
+ 
++    fn open_prompt_picker(&mut self) {
++        let prompts = prompt_files::discover_prompt_files(self.config.codex_home.as_path());
++        if prompts.is_empty() {
++            self.add_info_message(
++                "No saved prompts found.".to_string(),
++                Some(
++                    "Create Markdown files in `$CODEX_HOME/.prompt` with an optional top HTML comment for the picker description.".to_string(),
++                ),
++            );
++            return;
++        }
++
++        let items = prompts
++            .into_iter()
++            .map(|prompt| {
++                let description = prompt
++                    .description
++                    .clone()
++                    .or_else(|| prompt.disabled_reason.clone())
++                    .unwrap_or_else(|| "Insert prompt into composer".to_string());
++                let actions = prompt
++                    .content
++                    .into_iter()
++                    .map(|text| {
++                        let action: SelectionAction = Box::new(move |tx| {
++                            tx.send(AppEvent::SetComposerText { text: text.clone() });
++                        });
++                        action
++                    })
++                    .collect::<Vec<_>>();
++                SelectionItem {
++                    name: prompt.name.clone(),
++                    description: Some(description),
++                    actions,
++                    dismiss_on_select: true,
++                    is_disabled: prompt.disabled_reason.is_some(),
++                    disabled_reason: prompt.disabled_reason,
++                    search_value: Some(prompt.name),
++                    ..Default::default()
++                }
++            })
++            .collect();
++
++        self.bottom_pane.show_selection_view(SelectionViewParams {
++            title: Some("Select a prompt".to_string()),
++            subtitle: Some("Load prompt text from `$CODEX_HOME/.prompt`".to_string()),
++            footer_hint: Some(standard_popup_hint_line()),
++            items,
++            is_searchable: true,
++            search_placeholder: Some("Type to search prompts".to_string()),
++            ..Default::default()
++        });
++    }
++
+     fn emit_raw_output_mode_changed(&self, enabled: bool) {
+         self.app_event_tx
+             .send(AppEvent::RawOutputModeChanged { enabled });
+@@ -257,8 +312,12 @@ impl ChatWidget {
+                     .send(AppEvent::OpenDesktopThread { thread_id });
+             }
+             SlashCommand::Init => {
+-                const INIT_PROMPT: &str = include_str!("../../prompt_for_init_command.md");
+-                self.submit_user_message(INIT_PROMPT.to_string().into());
++                let init_prompt = self
++                    .config
++                    .instruction_overrides
++                    .init_instructions()
++                    .unwrap_or(include_str!("../../prompt_for_init_command.md"));
++                self.submit_user_message(init_prompt.to_string().into());
+             }
+             SlashCommand::Compact => {
+                 if self.blocks_direct_input {
+@@ -278,6 +337,9 @@ impl ChatWidget {
+                     self.defer_input_until_settings_applied();
+                 }
+             }
++            SlashCommand::Prompt => {
++                self.open_prompt_picker();
++            }
+             SlashCommand::Rename => {
+                 self.session_telemetry
+                     .counter("codex.thread.rename", /*inc*/ 1, &[]);
+@@ -1104,6 +1166,7 @@ impl ChatWidget {
+             | SlashCommand::TestApproval => QueueDrain::Continue,
+             SlashCommand::Feedback
+             | SlashCommand::Export
++            | SlashCommand::Prompt
+             | SlashCommand::New
+             | SlashCommand::Archive
+             | SlashCommand::Delete
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap
+new file mode 100644
+index 000000000..7ed5d3613
+--- /dev/null
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_prompt_picker.snap
+@@ -0,0 +1,11 @@
++---
++source: tui/src/chatwidget/tests/slash_commands.rs
++expression: popup
++---
++  Select a prompt
++  Load prompt text from `$CODEX_HOME/.prompt`
++
++  Type to search prompts
++› review  Review current diff for regressions.
++
++  Press enter to confirm or esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
+index bb6250580..6672f44a2 100644
+--- a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
++++ b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
+@@ -649,6 +649,28 @@ async fn slash_init_does_not_depend_on_loaded_instruction_sources() {
+     assert_eq!(recall_latest_after_clearing(&mut chat), "/init");
+ }
+ 
++#[tokio::test]
++async fn slash_init_uses_instruction_override_prompt_when_configured() {
++    let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    let tempdir = tempdir().expect("tempdir");
++    chat.config.cwd = tempdir.path().to_path_buf().abs();
++    chat.config.instruction_overrides.init_instructions =
++        Some("Write an AGENTS.md tailored to this repo.".to_string());
++
++    submit_composer_text(&mut chat, "/init");
++
++    match next_submit_op(&mut op_rx) {
++        Op::UserTurn { items, .. } => assert_eq!(
++            items,
++            vec![UserInput::Text {
++                text: "Write an AGENTS.md tailored to this repo.".to_string(),
++                text_elements: Vec::new(),
++            }]
++        ),
++        other => panic!("expected /init override to submit a user turn, got {other:?}"),
++    }
++}
++
+ #[tokio::test]
+ async fn bare_slash_command_is_available_from_local_recall_after_dispatch() {
+     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+@@ -2360,6 +2382,47 @@ async fn slash_memory_update_reports_stubbed_feature() {
+     );
+ }
+ 
++#[tokio::test]
++async fn slash_prompt_opens_picker_and_prefills_composer_without_description_comment() {
++    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    let codex_home = tempdir().expect("temp codex home");
++    chat.config.codex_home =
++        codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(codex_home.path())
++            .expect("temp dir is absolute");
++    let prompt_dir = chat.config.codex_home.join(".prompt");
++    std::fs::create_dir_all(&prompt_dir).expect("create prompt dir");
++    std::fs::write(
++        prompt_dir.join("review.md"),
++        "<!-- Review current diff for regressions. -->\nReview this diff for regressions.\n",
++    )
++    .expect("write prompt");
++
++    chat.dispatch_command(SlashCommand::Prompt);
++
++    let popup = render_bottom_popup(&chat, /*width*/ 80);
++    assert_chatwidget_snapshot!("slash_prompt_picker", popup);
++    assert!(
++        !popup.contains("review.md"),
++        "prompt picker should hide markdown extensions: {popup}"
++    );
++    assert!(
++        popup.contains("Review current diff for regressions."),
++        "prompt picker should render the top comment as the description: {popup}"
++    );
++
++    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
++    let text = match rx.try_recv() {
++        Ok(AppEvent::SetComposerText { text }) => text,
++        other => panic!("expected SetComposerText event, got {other:?}"),
++    };
++    chat.set_composer_text(text, Vec::new(), Vec::new());
++
++    assert_eq!(
++        chat.bottom_pane.composer_text_with_pending(),
++        "Review this diff for regressions.\n"
++    );
++}
++
+ #[tokio::test]
+ async fn slash_resume_opens_picker_while_mcp_startup_is_running() {
+     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+diff --git a/codex-rs/tui/src/collaboration_modes.rs b/codex-rs/tui/src/collaboration_modes.rs
+index b81f4bf4d..66b50d4d3 100644
+--- a/codex-rs/tui/src/collaboration_modes.rs
++++ b/codex-rs/tui/src/collaboration_modes.rs
+@@ -1,13 +1,14 @@
+-use codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets;
+ use codex_protocol::config_types::CollaborationModeMask;
+ use codex_protocol::config_types::ModeKind;
+ 
+ use crate::model_catalog::ModelCatalog;
+ 
+ fn filtered_presets(_model_catalog: &ModelCatalog) -> Vec<CollaborationModeMask> {
+-    builtin_collaboration_mode_presets()
+-        .into_iter()
+-        .filter(|mask| mask.mode.is_some_and(ModeKind::is_tui_visible))
++    _model_catalog
++        .collaboration_modes()
++        .iter()
++        .filter(|&mask| mask.mode.is_some_and(ModeKind::is_tui_visible))
++        .cloned()
+         .collect()
+ }
+ 
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index f8a973472..fbc8b391c 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -160,6 +160,7 @@ pub(crate) mod onboarding;
+ mod oss_selection;
+ mod pager_overlay;
+ mod permission_compat;
++mod prompt_files;
+ pub(crate) mod public_widgets;
+ mod render;
+ mod resize_reflow_cap;
+diff --git a/codex-rs/tui/src/model_catalog.rs b/codex-rs/tui/src/model_catalog.rs
+index 69c9ded56..9714d22e3 100644
+--- a/codex-rs/tui/src/model_catalog.rs
++++ b/codex-rs/tui/src/model_catalog.rs
+@@ -1,17 +1,37 @@
++#![cfg_attr(not(test), allow(unused_imports))]
++
++use codex_models_manager::collaboration_mode_presets::builtin_collaboration_mode_presets;
++use codex_protocol::config_types::CollaborationModeMask;
+ use codex_protocol::openai_models::ModelPreset;
+ use std::convert::Infallible;
+ 
+ #[derive(Debug, Clone)]
+ pub(crate) struct ModelCatalog {
+     models: Vec<ModelPreset>,
++    collaboration_modes: Vec<CollaborationModeMask>,
+ }
+ 
+ impl ModelCatalog {
++    #[cfg(test)]
+     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
+-        Self { models }
++        Self::with_collaboration_modes(models, builtin_collaboration_mode_presets())
++    }
++
++    pub(crate) fn with_collaboration_modes(
++        models: Vec<ModelPreset>,
++        collaboration_modes: Vec<CollaborationModeMask>,
++    ) -> Self {
++        Self {
++            models,
++            collaboration_modes,
++        }
+     }
+ 
+     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {
+         Ok(self.models.clone())
+     }
++
++    pub(crate) fn collaboration_modes(&self) -> &[CollaborationModeMask] {
++        &self.collaboration_modes
++    }
+ }
+diff --git a/codex-rs/tui/src/prompt_files.rs b/codex-rs/tui/src/prompt_files.rs
+new file mode 100644
+index 000000000..5aaf005ca
+--- /dev/null
++++ b/codex-rs/tui/src/prompt_files.rs
+@@ -0,0 +1,216 @@
++use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
++use std::fs;
++use std::path::Path;
++use std::path::PathBuf;
++
++pub(crate) const PROMPT_FILES_DIR_NAME: &str = ".prompt";
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub(crate) struct PromptFile {
++    pub(crate) name: String,
++    pub(crate) description: Option<String>,
++    pub(crate) content: Option<String>,
++    pub(crate) disabled_reason: Option<String>,
++}
++
++pub(crate) fn prompt_files_dir(codex_home: &Path) -> PathBuf {
++    codex_home.join(PROMPT_FILES_DIR_NAME)
++}
++
++pub(crate) fn discover_prompt_files(codex_home: &Path) -> Vec<PromptFile> {
++    let dir = prompt_files_dir(codex_home);
++    let Ok(entries) = fs::read_dir(&dir) else {
++        return Vec::new();
++    };
++
++    let mut prompts = Vec::new();
++    for entry in entries.flatten() {
++        let path = entry.path();
++        let Ok(metadata) = entry.metadata() else {
++            continue;
++        };
++        if !metadata.is_file() || !is_markdown_file(&path) {
++            continue;
++        }
++        let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) else {
++            continue;
++        };
++
++        let (description, content, disabled_reason) = match fs::read_to_string(&path) {
++            Ok(file_text) => {
++                let (description, prompt_text) = split_prompt_description(&file_text);
++                let char_count = prompt_text.chars().count();
++                if char_count == 0 {
++                    (
++                        description,
++                        None,
++                        Some("Prompt is empty after removing the description comment.".to_string()),
++                    )
++                } else if char_count > MAX_USER_INPUT_TEXT_CHARS {
++                    (
++                        description,
++                        None,
++                        Some(format!(
++                            "Prompt exceeds the maximum composer length of {MAX_USER_INPUT_TEXT_CHARS} characters."
++                        )),
++                    )
++                } else {
++                    (description, Some(prompt_text), None)
++                }
++            }
++            Err(err) => (None, None, Some(format!("Prompt could not be read: {err}"))),
++        };
++
++        prompts.push(PromptFile {
++            name: name.to_string(),
++            description,
++            content,
++            disabled_reason,
++        });
++    }
++
++    prompts.sort_by(|left, right| left.name.cmp(&right.name));
++    prompts
++}
++
++fn is_markdown_file(path: &Path) -> bool {
++    path.extension()
++        .and_then(|ext| ext.to_str())
++        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
++}
++
++fn split_prompt_description(file_text: &str) -> (Option<String>, String) {
++    let Some(comment_body) = file_text.strip_prefix("<!--") else {
++        return (None, file_text.to_string());
++    };
++    let Some(comment_end) = comment_body.find("-->") else {
++        return (None, file_text.to_string());
++    };
++
++    let raw_description = &comment_body[..comment_end];
++    let description = normalize_description(raw_description);
++    let remaining = &comment_body[comment_end + 3..];
++    let prompt_text = remaining
++        .strip_prefix("\r\n")
++        .or_else(|| remaining.strip_prefix('\n'))
++        .or_else(|| remaining.strip_prefix('\r'))
++        .unwrap_or(remaining)
++        .to_string();
++    (description, prompt_text)
++}
++
++fn normalize_description(raw_description: &str) -> Option<String> {
++    let normalized = raw_description
++        .lines()
++        .map(str::trim)
++        .filter(|line| !line.is_empty())
++        .collect::<Vec<_>>()
++        .join(" ");
++    (!normalized.is_empty()).then_some(normalized)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::PROMPT_FILES_DIR_NAME;
++    use super::discover_prompt_files;
++    use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
++    use pretty_assertions::assert_eq;
++    use std::fs;
++    use tempfile::tempdir;
++
++    #[test]
++    fn discover_prompt_files_lists_markdown_without_extensions() {
++        let codex_home = tempdir().expect("temp codex home");
++        let prompt_dir = codex_home.path().join(PROMPT_FILES_DIR_NAME);
++        fs::create_dir_all(&prompt_dir).expect("create prompt dir");
++        fs::write(prompt_dir.join("zeta.md"), "zeta").expect("write zeta");
++        fs::write(prompt_dir.join("alpha.md"), "alpha").expect("write alpha");
++        fs::write(prompt_dir.join("skip.txt"), "skip").expect("write txt");
++
++        let prompts = discover_prompt_files(codex_home.path());
++
++        assert_eq!(
++            prompts
++                .into_iter()
++                .map(|prompt| {
++                    (
++                        prompt.name,
++                        prompt.description,
++                        prompt.content,
++                        prompt.disabled_reason,
++                    )
++                })
++                .collect::<Vec<_>>(),
++            vec![
++                ("alpha".to_string(), None, Some("alpha".to_string()), None),
++                ("zeta".to_string(), None, Some("zeta".to_string()), None),
++            ]
++        );
++    }
++
++    #[test]
++    fn discover_prompt_files_uses_top_html_comment_as_description() {
++        let codex_home = tempdir().expect("temp codex home");
++        let prompt_dir = codex_home.path().join(PROMPT_FILES_DIR_NAME);
++        fs::create_dir_all(&prompt_dir).expect("create prompt dir");
++        fs::write(
++            prompt_dir.join("review.md"),
++            "<!-- Review current diff for regressions. -->\nReview this diff.\n",
++        )
++        .expect("write prompt");
++
++        let prompts = discover_prompt_files(codex_home.path());
++
++        assert_eq!(prompts.len(), 1);
++        assert_eq!(prompts[0].name, "review");
++        assert_eq!(
++            prompts[0].description.as_deref(),
++            Some("Review current diff for regressions.")
++        );
++        assert_eq!(prompts[0].content.as_deref(), Some("Review this diff.\n"));
++        assert_eq!(prompts[0].disabled_reason, None);
++    }
++
++    #[test]
++    fn discover_prompt_files_disables_empty_prompt_after_comment() {
++        let codex_home = tempdir().expect("temp codex home");
++        let prompt_dir = codex_home.path().join(PROMPT_FILES_DIR_NAME);
++        fs::create_dir_all(&prompt_dir).expect("create prompt dir");
++        fs::write(prompt_dir.join("empty.md"), "<!-- Description only -->\n")
++            .expect("write prompt");
++
++        let prompts = discover_prompt_files(codex_home.path());
++
++        assert_eq!(prompts.len(), 1);
++        assert_eq!(prompts[0].name, "empty");
++        assert_eq!(prompts[0].content, None);
++        assert_eq!(
++            prompts[0].disabled_reason.as_deref(),
++            Some("Prompt is empty after removing the description comment.")
++        );
++    }
++
++    #[test]
++    fn discover_prompt_files_marks_oversized_prompts_disabled() {
++        let codex_home = tempdir().expect("temp codex home");
++        let prompt_dir = codex_home.path().join(PROMPT_FILES_DIR_NAME);
++        fs::create_dir_all(&prompt_dir).expect("create prompt dir");
++        let oversized = format!(
++            "<!-- desc -->\n{}",
++            "x".repeat(MAX_USER_INPUT_TEXT_CHARS + 1)
++        );
++        fs::write(prompt_dir.join("oversized.md"), oversized).expect("write oversized");
++
++        let prompts = discover_prompt_files(codex_home.path());
++
++        assert_eq!(prompts.len(), 1);
++        assert_eq!(prompts[0].name, "oversized");
++        assert_eq!(prompts[0].content, None);
++        assert_eq!(
++            prompts[0].disabled_reason,
++            Some(format!(
++                "Prompt exceeds the maximum composer length of {MAX_USER_INPUT_TEXT_CHARS} characters."
++            ))
++        );
++    }
++}
+diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
+index b36987034..bc8eca40b 100644
+--- a/codex-rs/tui/src/slash_command.rs
++++ b/codex-rs/tui/src/slash_command.rs
+@@ -29,6 +29,7 @@ pub enum SlashCommand {
+     Import,
+     Hooks,
+     Review,
++    Prompt,
+     Rename,
+     New,
+     Archive,
+@@ -88,6 +89,7 @@ impl SlashCommand {
+             SlashCommand::Init => "create an AGENTS.md file with instructions for Codex",
+             SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
+             SlashCommand::Review => "review my current changes and find issues",
++            SlashCommand::Prompt => "load a saved composer prompt from $CODEX_HOME/.prompt",
+             SlashCommand::Rename => "rename the current thread",
+             SlashCommand::Resume => "resume a saved chat",
+             SlashCommand::Archive => "archive this session and exit",
+@@ -187,6 +189,7 @@ impl SlashCommand {
+                 | SlashCommand::Mention
+                 | SlashCommand::Status
+                 | SlashCommand::Usage
++                | SlashCommand::Prompt
+                 | SlashCommand::Ide
+         )
+     }
+@@ -222,6 +225,7 @@ impl SlashCommand {
+             | SlashCommand::Copy
+             | SlashCommand::Raw
+             | SlashCommand::Rename
++            | SlashCommand::Prompt
+             | SlashCommand::Mention
+             | SlashCommand::Skills
+             | SlashCommand::Hooks

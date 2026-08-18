@@ -1,15 +1,14 @@
 # Configure a fast drive for Windows CI jobs.
 #
 # GitHub-hosted Windows runners do not always expose a secondary D: volume. When
-# they do not, create a Dev Drive VHD. CI depends on this path for its
-# build directories where CI spends significant time doing I/O, so fail the
-# job if no real Dev Drive is available.
+# they do not, try to create a Dev Drive VHD and fall back to C: if the runner
+# image does not allow that provisioning path.
 
-function Test-DevDrive {
-    param([string]$Drive)
+function Use-FallbackDrive {
+    param([string]$Reason)
 
-    & fsutil devdrv query $Drive *> $null
-    return $LASTEXITCODE -eq 0
+    Write-Warning "$Reason Falling back to C:"
+    return "C:"
 }
 
 function Invoke-BestEffort {
@@ -22,14 +21,10 @@ function Invoke-BestEffort {
     }
 }
 
-if ((Test-Path "D:\") -and (Test-DevDrive "D:")) {
-    Write-Output "Using existing Dev Drive at D:"
+if (Test-Path "D:\") {
+    Write-Output "Using existing drive at D:"
     $Drive = "D:"
 } else {
-    if (Test-Path "D:\") {
-        Write-Output "Existing D: volume is not a Dev Drive; provisioning a new Dev Drive VHD."
-    }
-
     try {
         $VhdPath = Join-Path $env:RUNNER_TEMP "codex-dev-drive.vhdx"
         $SizeBytes = 64GB
@@ -47,17 +42,21 @@ if ((Test-Path "D:\") -and (Test-DevDrive "D:")) {
 
         $Drive = "$($Volume.DriveLetter):"
 
-        if (-not (Test-DevDrive $Drive)) {
-            throw "Provisioned volume at $Drive did not pass Dev Drive verification."
-        }
-
         Invoke-BestEffort { fsutil devdrv trust $Drive } "Trusting Dev Drive $Drive"
         Invoke-BestEffort { fsutil devdrv enable /disallowAv } "Disabling AV filter attachment for Dev Drives"
+        Invoke-BestEffort { fsutil devdrv query $Drive } "Querying Dev Drive $Drive"
 
         Write-Output "Using Dev Drive at $Drive"
     } catch {
-        throw "Failed to create Dev Drive: $($_.Exception.Message)"
+        $Drive = Use-FallbackDrive "Failed to create Dev Drive: $($_.Exception.Message)"
     }
 }
 
-"CI_BUILD_ROOT=$Drive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+$Tmp = "$Drive\codex-tmp"
+New-Item -Path $Tmp -ItemType Directory -Force | Out-Null
+
+@(
+    "DEV_DRIVE=$Drive"
+    "TMP=$Tmp"
+    "TEMP=$Tmp"
+) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append

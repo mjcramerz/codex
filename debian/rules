@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export CARGO_HOME = $(CURDIR)/debian/cargo-home
+export CARGO_TARGET_DIR = $(CURDIR)/codex-rs/target
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) package-build
+
+override_dh_auto_install:
+	$(MAKE) DESTDIR=$(CURDIR)/debian/codex package-install
+
+override_dh_auto_test:
+	@echo "Skipping upstream tests during Debian package build; CI validates the installed package separately."
+
+override_dh_auto_clean:
+	$(MAKE) package-clean
+	rm -rf debian/cargo-home
+	dh_auto_clean

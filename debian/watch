@@ -1,0 +1,3 @@
+version=4
+opts=filenamemangle=s!.*/v?(\d[\dA-Za-z.+~-]*)\.tar\.gz!codex-$1.tar.gz! \
+  https://github.com/openai/codex/tags .*/v?(\d[\dA-Za-z.+~-]*)\.tar\.gz

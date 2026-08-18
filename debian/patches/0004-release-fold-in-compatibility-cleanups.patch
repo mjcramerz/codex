@@ -1,0 +1,183 @@
+diff --git a/codex-rs/app-server/src/lib.rs b/codex-rs/app-server/src/lib.rs
+index 058814830..34e1e9df3 100644
+--- a/codex-rs/app-server/src/lib.rs
++++ b/codex-rs/app-server/src/lib.rs
+@@ -1345,9 +1345,12 @@ fn test_user_config_file_from_env() -> Option<std::path::PathBuf> {
+ }
+ 
+ fn loader_overrides_with_test_user_config_file(
+-    mut loader_overrides: LoaderOverrides,
++    loader_overrides: LoaderOverrides,
+     test_user_config_file: Option<std::path::PathBuf>,
+ ) -> IoResult<LoaderOverrides> {
++    #[cfg(debug_assertions)]
++    let mut loader_overrides = loader_overrides;
++
+     #[cfg(debug_assertions)]
+     if let Some(path) = test_user_config_file {
+         let path = AbsolutePathBuf::from_absolute_path(path).map_err(|err| {
+diff --git a/codex-rs/app-server/src/main.rs b/codex-rs/app-server/src/main.rs
+index 4d5ab3f12..c2aa6c366 100644
+--- a/codex-rs/app-server/src/main.rs
++++ b/codex-rs/app-server/src/main.rs
+@@ -3,7 +3,6 @@ use codex_app_server::AppServerCodeModeHostArgs;
+ use codex_app_server::AppServerRuntimeOptions;
+ use codex_app_server::AppServerTransport;
+ use codex_app_server::AppServerWebsocketAuthArgs;
+-use codex_app_server::PluginStartupTasks;
+ use codex_app_server::run_main_with_transport_options;
+ use codex_arg0::Arg0DispatchPaths;
+ use codex_arg0::arg0_dispatch_or_else;
+@@ -91,7 +90,7 @@ fn main() -> anyhow::Result<()> {
+         };
+         #[cfg(debug_assertions)]
+         if disable_plugin_startup_tasks_for_tests {
+-            runtime_options.plugin_startup_tasks = PluginStartupTasks::Skip;
++            runtime_options.plugin_startup_tasks = codex_app_server::PluginStartupTasks::Skip;
+         }
+         runtime_options.remote_control_startup_mode =
+             match (remote_control, remote_control_disabled) {
+diff --git a/codex-rs/app-server/src/message_processor.rs b/codex-rs/app-server/src/message_processor.rs
+index d02be3412..dd53b63f3 100644
+--- a/codex-rs/app-server/src/message_processor.rs
++++ b/codex-rs/app-server/src/message_processor.rs
+@@ -1000,7 +1000,7 @@ impl MessageProcessor {
+                 .clients_revoke(params)
+                 .await
+                 .map(|response| Some(response.into())),
+-            ClientRequest::ConfigRequirementsRead { params: _, .. } => self
++            ClientRequest::ConfigRequirementsRead { .. } => self
+                 .config_processor
+                 .config_requirements_read()
+                 .await
+@@ -1059,7 +1059,7 @@ impl MessageProcessor {
+                 .unwatch(connection_id, params)
+                 .await
+                 .map(|response| Some(response.into())),
+-            ClientRequest::ModelProviderCapabilitiesRead { params: _, .. } => self
++            ClientRequest::ModelProviderCapabilitiesRead { .. } => self
+                 .config_processor
+                 .model_provider_capabilities_read()
+                 .await
+@@ -1407,7 +1407,7 @@ impl MessageProcessor {
+                     .thread_realtime_stop(&request_id, params)
+                     .await
+             }
+-            ClientRequest::ThreadRealtimeListVoices { params: _, .. } => {
++            ClientRequest::ThreadRealtimeListVoices { .. } => {
+                 self.turn_processor.thread_realtime_list_voices().await
+             }
+             ClientRequest::ReviewStart { params, .. } => {
+diff --git a/codex-rs/cli/src/doctor.rs b/codex-rs/cli/src/doctor.rs
+index 65e5ed14b..a0a987b60 100644
+--- a/codex-rs/cli/src/doctor.rs
++++ b/codex-rs/cli/src/doctor.rs
+@@ -4025,6 +4025,10 @@ mod tests {
+     fn read_probe_file_rejects_unreadable_file() {
+         use std::os::unix::fs::PermissionsExt;
+ 
++        if unsafe { libc::geteuid() } == 0 {
++            return;
++        }
++
+         let file = tempfile::NamedTempFile::new().expect("create temp file");
+         std::fs::write(file.path(), "cert").expect("write temp file");
+         let mut permissions = std::fs::metadata(file.path())
+diff --git a/codex-rs/codex-mcp/src/connection_manager/startup.rs b/codex-rs/codex-mcp/src/connection_manager/startup.rs
+index 138d6877b..20b661d3b 100644
+--- a/codex-rs/codex-mcp/src/connection_manager/startup.rs
++++ b/codex-rs/codex-mcp/src/connection_manager/startup.rs
+@@ -1,6 +1,5 @@
+ use std::collections::HashMap;
+ 
+-use anyhow::Result;
+ use async_channel::Sender;
+ use codex_api::SharedAuthProvider;
+ use codex_config::McpServerAuth;
+@@ -42,13 +41,13 @@ pub(super) async fn emit_update(
+     submit_id: &str,
+     tx_event: &Sender<Event>,
+     update: McpStartupUpdateEvent,
+-) -> Result<(), async_channel::SendError<Event>> {
+-    tx_event
++) {
++    let _ = tx_event
+         .send(Event {
+             id: submit_id.to_string(),
+             msg: EventMsg::McpStartupUpdate(update),
+         })
+-        .await
++        .await;
+ }
+ 
+ pub(super) fn mcp_startup_failure_reason(
+diff --git a/codex-rs/external-agent-migration/src/mcp.rs b/codex-rs/external-agent-migration/src/mcp.rs
+index eb820ce24..46889af75 100644
+--- a/codex-rs/external-agent-migration/src/mcp.rs
++++ b/codex-rs/external-agent-migration/src/mcp.rs
+@@ -222,7 +222,8 @@ fn mcp_server_toml_table(
+         if let Some(env) = server_config.get("env").and_then(JsonValue::as_object) {
+             append_env_config(&mut table, env)?;
+         }
+-    } else if let Some(url) = server_config.get("url").and_then(json_string) {
++    } else {
++        let url = server_config.get("url").and_then(json_string)?;
+         if !matches!(
+             transport_type,
+             None | Some("http") | Some("streamable_http")
+@@ -236,8 +237,6 @@ fn mcp_server_toml_table(
+         if let Some(headers) = server_config.get("headers").and_then(JsonValue::as_object) {
+             append_header_config(&mut table, headers)?;
+         }
+-    } else {
+-        return None;
+     }
+ 
+     Some(table)
+diff --git a/codex-rs/response-debug-context/src/lib.rs b/codex-rs/response-debug-context/src/lib.rs
+index 822210d14..82f120db8 100644
+--- a/codex-rs/response-debug-context/src/lib.rs
++++ b/codex-rs/response-debug-context/src/lib.rs
+@@ -19,10 +19,7 @@ pub struct ResponseDebugContext {
+ pub fn extract_response_debug_context(transport: &TransportError) -> ResponseDebugContext {
+     let mut context = ResponseDebugContext::default();
+ 
+-    let TransportError::Http {
+-        headers, body: _, ..
+-    } = transport
+-    else {
++    let TransportError::Http { headers, .. } = transport else {
+         return context;
+     };
+ 
+diff --git a/codex-rs/shell-command/src/bash.rs b/codex-rs/shell-command/src/bash.rs
+index 10da75fb6..fe0a2c99f 100644
+--- a/codex-rs/shell-command/src/bash.rs
++++ b/codex-rs/shell-command/src/bash.rs
+@@ -85,11 +85,8 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
+ 
+     let mut commands = Vec::new();
+     for node in command_nodes {
+-        if let Some(words) = parse_plain_command_from_node(node, src) {
+-            commands.push(words);
+-        } else {
+-            return None;
+-        }
++        let words = parse_plain_command_from_node(node, src)?;
++        commands.push(words);
+     }
+     Some(commands)
+ }
+diff --git a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs b/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
+index 0b7501cdb..2a35e73da 100644
+--- a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
++++ b/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
+@@ -92,7 +92,7 @@ where
+             .iter()
+             .map(|spec| longest_suffix_prefix_len(&self.pending, spec.open))
+             .max()
+-            .map_or(0, std::convert::identity)
++            .unwrap_or(0)
+     }
+ 
+     fn push_visible_prefix(out: &mut StreamTextChunk<ExtractedInlineTag<T>>, pending: &str) {
