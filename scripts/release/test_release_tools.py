@@ -116,6 +116,7 @@ class ReleaseToolsTest(unittest.TestCase):
         environment = os.environ.copy()
         environment.pop("COMP", None)
         environment.pop("RELEASE_CARGO_JOBS", None)
+        environment.pop("RELEASE_CARGO_LTO", None)
         environment.pop("RELEASE_RUSTC_THREADS", None)
         cases = (
             (None, "both", True, True),
@@ -158,6 +159,10 @@ class ReleaseToolsTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     '--cargo-jobs "1"' in output,
+                    has_cargo,
+                )
+                self.assertEqual(
+                    '--cargo-lto "off"' in output,
                     has_cargo,
                 )
                 self.assertIn("codex.tar.gz", output)
@@ -220,6 +225,57 @@ class ReleaseToolsTest(unittest.TestCase):
         )
 
         self.assertIn('--cargo-jobs "2"', override_result.stdout)
+
+    def test_make_cargo_lto_defaults_off_and_can_be_overridden(self) -> None:
+        default_result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "build",
+                "COMP=cargo",
+                "VERSION=0.147.0",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn('--cargo-lto "off"', default_result.stdout)
+
+        override_result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "build",
+                "COMP=cargo",
+                "VERSION=0.147.0",
+                "RELEASE_CARGO_LTO=thin",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn('--cargo-lto "thin"', override_result.stdout)
+
+    def test_debian_copyright_lists_release_patch_series(self) -> None:
+        patch_files, _, _ = release_contract.resolve_patch_series(
+            ROOT / "debian/patches",
+            ROOT / "debian/patches/series",
+            strict=True,
+        )
+        copyright_data = (ROOT / "debian/copyright").read_bytes()
+        missing_paths = [
+            str(patch.relative_to(ROOT))
+            for patch in patch_files
+            if str(patch.relative_to(ROOT)).encode() not in copyright_data
+        ]
+
+        self.assertEqual(missing_paths, [])
 
 
 if __name__ == "__main__":

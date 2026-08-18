@@ -32,6 +32,9 @@ RELEASE_BAZEL_TARGET ?= //bazel/release:release-binaries
 RELEASE_JOBS ?=
 # Keep memory-heavy Cargo release rustc processes serialized by default.
 RELEASE_CARGO_JOBS ?= 1
+# Disable release LTO by default so the large codex-tui and codex-cli crates
+# stay within the memory budget of the manual release builder.
+RELEASE_CARGO_LTO ?= off
 RELEASE_RUSTC_THREADS ?= 1
 RELEASE_BASE_REF ?= mcr/main
 VERSION ?=
@@ -64,6 +67,9 @@ endif
 ifneq ($(filter both cargo,$(strip $(COMP))),)
 ifneq ($(strip $(RELEASE_CARGO_JOBS)),)
 RELEASE_BUILD_ARGS += --cargo-jobs "$(RELEASE_CARGO_JOBS)"
+endif
+ifneq ($(strip $(RELEASE_CARGO_LTO)),)
+RELEASE_BUILD_ARGS += --cargo-lto "$(RELEASE_CARGO_LTO)"
 endif
 ifneq ($(strip $(RELEASE_RUSTC_THREADS)),)
 RELEASE_BUILD_ARGS += --rustc-threads "$(RELEASE_RUSTC_THREADS)"

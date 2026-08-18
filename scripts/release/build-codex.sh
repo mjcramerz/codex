@@ -18,6 +18,7 @@ DEFAULT_RUST_CHANNEL="nightly"
 DEFAULT_TARGET_CPU="skylake"
 DEFAULT_BAZEL_TARGET="//bazel/release:release-binaries"
 DEFAULT_BUILD_JOBS="1"
+DEFAULT_CARGO_LTO="off"
 DEFAULT_RUSTC_THREADS="1"
 DEFAULT_COMP="both"
 BAZEL_COMPILATION_MODE="opt"
@@ -55,6 +56,8 @@ Options:
                        Default: 1
   --cargo-jobs N       Limit Cargo jobs independently from Bazel jobs.
                        Defaults to --jobs when omitted.
+  --cargo-lto MODE     Cargo release-profile LTO mode: off, false, thin,
+                       fat, or true. Default: off to bound peak memory.
   -h, --help           Show this help text.
 
 This script is intended for manual x86_64 GNU/Linux release builds only.
@@ -763,6 +766,9 @@ manifest = {
     "rust_toolchain": optional_env("RUST_TOOLCHAIN") if run_cargo else None,
     "toolchain_manager": "mise" if run_cargo else None,
     "cargo_profile": "release" if run_cargo else None,
+    "cargo_profile_lto": (
+        optional_env("CARGO_PROFILE_RELEASE_LTO") if run_cargo else None
+    ),
     "cargo_target_dir": optional_env("CARGO_TARGET_DIR") if run_cargo else None,
     "target_cpu": os.environ.get("RUST_TARGET_CPU"),
     "rustc_threads": optional_env("RUSTC_THREADS") if run_cargo else None,
@@ -881,6 +887,7 @@ RUSTC_THREADS="${RELEASE_RUSTC_THREADS:-${DEFAULT_RUSTC_THREADS}}"
 BASE_REF=""
 BUILD_JOBS="${DEFAULT_BUILD_JOBS}"
 CARGO_JOBS=""
+CARGO_LTO="${RELEASE_CARGO_LTO:-${DEFAULT_CARGO_LTO}}"
 WORKSPACE_VERSION_OVERRIDE=""
 COMP="${DEFAULT_COMP}"
 RUN_BAZEL="false"
@@ -951,6 +958,11 @@ while [ $# -gt 0 ]; do
     --cargo-jobs)
       [ $# -ge 2 ] || die "--cargo-jobs requires a value"
       CARGO_JOBS="$2"
+      shift 2
+      ;;
+    --cargo-lto)
+      [ $# -ge 2 ] || die "--cargo-lto requires a value"
+      CARGO_LTO="$2"
       shift 2
       ;;
     -h|--help)
@@ -1031,6 +1043,12 @@ fi
 if ! [[ "${CARGO_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
   die "--cargo-jobs must be a positive integer"
 fi
+case "${CARGO_LTO}" in
+  off|false|thin|fat|true) ;;
+  *)
+    die "--cargo-lto must be one of: off, false, thin, fat, true (got: ${CARGO_LTO})"
+    ;;
+esac
 validate_target_cpu "${RUST_TARGET_CPU}"
 if [ "${RUN_BAZEL}" = "true" ]; then
   case "${BAZEL_TARGET}" in
@@ -1065,6 +1083,7 @@ if [ "${RUN_CARGO}" = "true" ]; then
   export CARGO_HOME="${BUILD_CARGO_HOME}"
   export CARGO_TARGET_DIR="${CACHE_ROOT}/target"
   export CARGO_NET_GIT_FETCH_WITH_CLI=true
+  export CARGO_PROFILE_RELEASE_LTO="${CARGO_LTO}"
   unset RUSTUP_TOOLCHAIN
 
   TOOLCHAIN_FILE="${REPO_ROOT}/codex-rs/rust-toolchain.toml"
@@ -1077,6 +1096,7 @@ if [ "${RUN_CARGO}" = "true" ]; then
   )"
   export RUST_TARGET_FEATURES
   configure_build_rustflags "${RUST_CHANNEL}" "${RUST_TARGET_CPU}" "${RUSTC_THREADS}"
+  info "Using Cargo release profile override: lto=${CARGO_PROFILE_RELEASE_LTO}"
 fi
 
 if [ "${RUN_BAZEL}" = "true" ]; then
