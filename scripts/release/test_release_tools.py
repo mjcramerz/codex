@@ -115,6 +115,7 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_make_compilation_backend_routing(self) -> None:
         environment = os.environ.copy()
         environment.pop("COMP", None)
+        environment.pop("RELEASE_RUSTC_THREADS", None)
         cases = (
             (None, "both", True, True),
             ("both", "both", True, True),
@@ -150,8 +151,31 @@ class ReleaseToolsTest(unittest.TestCase):
                     '--bazel-target "//bazel/release:release-binaries"' in output,
                     has_bazel,
                 )
+                self.assertEqual(
+                    '--rustc-threads "1"' in output,
+                    has_cargo,
+                )
                 self.assertIn("codex.tar.gz", output)
                 self.assertIn("config.schema.json", output)
+
+    def test_make_rustc_threads_override(self) -> None:
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "build",
+                "COMP=cargo",
+                "VERSION=1.2.3",
+                "RELEASE_RUSTC_THREADS=2",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn('--rustc-threads "2"', result.stdout)
 
 
 if __name__ == "__main__":

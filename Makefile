@@ -30,6 +30,7 @@ RELEASE_TARGET_CPU ?= skylake
 RELEASE_TOOLCHAIN ?= nightly
 RELEASE_BAZEL_TARGET ?= //bazel/release:release-binaries
 RELEASE_JOBS ?=
+RELEASE_RUSTC_THREADS ?= 1
 RELEASE_BASE_REF ?= mcr/main
 VERSION ?=
 COMP ?= both
@@ -57,6 +58,11 @@ endif
 endif
 ifneq ($(strip $(RELEASE_JOBS)),)
 RELEASE_BUILD_ARGS += --jobs "$(RELEASE_JOBS)"
+endif
+ifneq ($(filter both cargo,$(strip $(COMP))),)
+ifneq ($(strip $(RELEASE_RUSTC_THREADS)),)
+RELEASE_BUILD_ARGS += --rustc-threads "$(RELEASE_RUSTC_THREADS)"
+endif
 endif
 ifneq ($(strip $(RELEASE_BASE_REF)),)
 RELEASE_BUILD_ARGS += --base-ref "$(RELEASE_BASE_REF)"

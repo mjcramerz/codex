@@ -18,6 +18,7 @@ DEFAULT_RUST_CHANNEL="nightly"
 DEFAULT_TARGET_CPU="skylake"
 DEFAULT_BAZEL_TARGET="//bazel/release:release-binaries"
 DEFAULT_BUILD_JOBS="1"
+DEFAULT_RUSTC_THREADS="1"
 DEFAULT_COMP="both"
 BAZEL_COMPILATION_MODE="opt"
 RELEASE_ARCHIVE_NAME="codex.tar.gz"
@@ -49,7 +50,9 @@ Options:
                        //bazel/release:release-binaries, which covers every
                        binary in the release manifest.
   --rustc-threads N    In Cargo modes, add -Z threads=N to nightly rustc.
+                       Default: 1 to bound peak release-build memory.
   --jobs N             Limit jobs for each selected compilation backend.
+                       Default: 1
   -h, --help           Show this help text.
 
 This script is intended for manual x86_64 GNU/Linux release builds only.
@@ -98,18 +101,6 @@ require_absolute_path() {
       die "expected an absolute path, got: ${value}"
       ;;
   esac
-}
-
-default_rustc_threads() {
-  if command -v nproc >/dev/null 2>&1; then
-    nproc
-    return 0
-  fi
-  if command -v getconf >/dev/null 2>&1; then
-    getconf _NPROCESSORS_ONLN
-    return 0
-  fi
-  printf '1\n'
 }
 
 validate_target_cpu() {
@@ -881,7 +872,7 @@ RUST_TARGET="${DEFAULT_TARGET}"
 RUST_CHANNEL="${RELEASE_RUST_TOOLCHAIN:-${DEFAULT_RUST_CHANNEL}}"
 RUST_TARGET_CPU="${DEFAULT_TARGET_CPU}"
 BAZEL_TARGET="${DEFAULT_BAZEL_TARGET}"
-RUSTC_THREADS=""
+RUSTC_THREADS="${RELEASE_RUSTC_THREADS:-${DEFAULT_RUSTC_THREADS}}"
 BASE_REF=""
 BUILD_JOBS="${DEFAULT_BUILD_JOBS}"
 WORKSPACE_VERSION_OVERRIDE=""
@@ -1060,9 +1051,6 @@ if [ "${RUN_CARGO}" = "true" ]; then
 
   TOOLCHAIN_FILE="${REPO_ROOT}/codex-rs/rust-toolchain.toml"
   [ -f "${TOOLCHAIN_FILE}" ] || die "missing ${TOOLCHAIN_FILE}"
-  if [ -z "${RUSTC_THREADS}" ]; then
-    RUSTC_THREADS="$(default_rustc_threads)"
-  fi
   export RUSTC_THREADS
   ensure_rust_toolchain "${RUST_CHANNEL}" "${RUST_TARGET}"
   ensure_sccache
