@@ -341,6 +341,84 @@ ensure_sccache() {
   info "Using persistent sccache directory ${SCCACHE_DIR}"
 }
 
+configure_cargo_rusty_v8_artifacts() {
+  local checkout_dir="$1"
+  local env_output
+  local -a artifact_paths=()
+
+  env_output="$(mktemp "${checkout_dir}/.rusty-v8-env.XXXXXX")"
+  if ! PYTHONPATH="${checkout_dir}/scripts" python3 - \
+    "${RUST_TARGET}" \
+    "${CACHE_ROOT}/rusty-v8" \
+    >"${env_output}" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+from codex_package.targets import TARGET_SPECS
+from codex_package.v8 import resolve_codex_v8_cargo_env
+
+target, cache_root = sys.argv[1:]
+try:
+    spec = TARGET_SPECS[target]
+except KeyError:
+    raise SystemExit(f"unsupported rusty_v8 target: {target}")
+
+try:
+    cargo_env = resolve_codex_v8_cargo_env(
+        spec,
+        environ=os.environ,
+        cache_root=Path(cache_root),
+    )
+except Exception as exc:
+    raise SystemExit(f"failed to configure Codex-built rusty_v8 artifacts: {exc}")
+
+for key in ("RUSTY_V8_ARCHIVE", "RUSTY_V8_SRC_BINDING_PATH"):
+    if value := cargo_env.get(key):
+        sys.stdout.buffer.write(os.fsencode(value))
+        sys.stdout.buffer.write(b"\0")
+PY
+  then
+    die "failed to resolve Codex-built rusty_v8 artifacts"
+  fi
+
+  mapfile -d '' -t artifact_paths < "${env_output}"
+  rm -f -- "${env_output}"
+
+  case "${#artifact_paths[@]}" in
+    0)
+      case "${V8_FROM_SOURCE:-}" in
+        1|true|yes)
+          info "Using the caller-requested rusty_v8 source build"
+          ;;
+        *)
+          if [ -n "${RUSTY_V8_ARCHIVE:-}" ] \
+            && [ -n "${RUSTY_V8_SRC_BINDING_PATH:-}" ]; then
+            info "Using caller-provided rusty_v8 artifact overrides"
+          else
+            die "rusty_v8 artifact setup returned no archive or binding"
+          fi
+          ;;
+      esac
+      ;;
+    2)
+      RUSTY_V8_ARCHIVE="${artifact_paths[0]}"
+      RUSTY_V8_SRC_BINDING_PATH="${artifact_paths[1]}"
+      require_absolute_path "${RUSTY_V8_ARCHIVE}"
+      require_absolute_path "${RUSTY_V8_SRC_BINDING_PATH}"
+      [ -f "${RUSTY_V8_ARCHIVE}" ] \
+        || die "missing checksum-verified rusty_v8 archive: ${RUSTY_V8_ARCHIVE}"
+      [ -f "${RUSTY_V8_SRC_BINDING_PATH}" ] \
+        || die "missing checksum-verified rusty_v8 binding: ${RUSTY_V8_SRC_BINDING_PATH}"
+      export RUSTY_V8_ARCHIVE RUSTY_V8_SRC_BINDING_PATH
+      info "Using checksum-verified Codex-built rusty_v8 artifacts for ${RUST_TARGET}"
+      ;;
+    *)
+      die "rusty_v8 artifact setup returned ${#artifact_paths[@]} paths; expected zero or two"
+      ;;
+  esac
+}
+
 read_bazel_version() {
   local version
 
@@ -1083,6 +1161,7 @@ printf '%s\n' "${RELEASE_BINS[@]}" > "${RELEASE_BIN_LIST_FILE}"
 
 if [ "${RUN_CARGO}" = "true" ]; then
   sync_lockfile_if_needed "${CHECKOUT_DIR}/codex-rs/Cargo.toml" "${RUST_CHANNEL}"
+  configure_cargo_rusty_v8_artifacts "${CHECKOUT_DIR}"
 fi
 
 if [ "${RUN_BAZEL}" = "true" ]; then

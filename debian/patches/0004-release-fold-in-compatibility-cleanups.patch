@@ -168,6 +168,14 @@ index 10da75fb6..fe0a2c99f 100644
      }
      Some(commands)
  }
+diff --git a/codex-rs/tui/src/app_backtrack.rs b/codex-rs/tui/src/app_backtrack.rs
+index 855e7c51c..328131119 100644
+--- a/codex-rs/tui/src/app_backtrack.rs
++++ b/codex-rs/tui/src/app_backtrack.rs
+@@ -578,2 +578,2 @@ fn turn_id_for_nth_user_message(
+-    bail!("the selected prompt was not found in the persisted thread")
++    bail!("the selected prompt was not found in the persisted thread");
+ }
 diff --git a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs b/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
 index 0b7501cdb..2a35e73da 100644
 --- a/codex-rs/utils/stream-parser/src/inline_hidden_tag.rs
