@@ -1,8 +1,8 @@
 diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
-index 1a23f6f06..349c26797 100644
+index 768fcbd6e..3f2f1f0f1 100644
 --- a/codex-rs/tui/src/app/event_dispatch.rs
 +++ b/codex-rs/tui/src/app/event_dispatch.rs
-@@ -2375,6 +2375,10 @@ impl App {
+@@ -2521,6 +2521,10 @@ impl App {
              AppEvent::OpenReviewCustomPrompt => {
                  self.chat_widget.show_review_custom_prompt();
              }
@@ -14,10 +14,10 @@ index 1a23f6f06..349c26797 100644
                  text,
                  collaboration_mode,
 diff --git a/codex-rs/tui/src/app/startup.rs b/codex-rs/tui/src/app/startup.rs
-index 97d5bb697..84b6129f8 100644
+index 010c7c637..3a11c1f8b 100644
 --- a/codex-rs/tui/src/app/startup.rs
 +++ b/codex-rs/tui/src/app/startup.rs
-@@ -161,7 +161,16 @@ impl App {
+@@ -163,7 +163,16 @@ impl App {
          if let Some(updated_model) = config.model.clone() {
              model = updated_model;
          }
@@ -36,10 +36,10 @@ index 97d5bb697..84b6129f8 100644
          let auth_mode = bootstrap.auth_mode;
          let has_chatgpt_account = bootstrap.has_chatgpt_account;
 diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
-index 6fde0759d..f3b1aaf24 100644
+index 85938623a..ed8789d40 100644
 --- a/codex-rs/tui/src/app_event.rs
 +++ b/codex-rs/tui/src/app_event.rs
-@@ -1080,6 +1080,11 @@ pub(crate) enum AppEvent {
+@@ -1136,6 +1136,11 @@ pub(crate) enum AppEvent {
      /// Open the custom prompt option from the review popup.
      OpenReviewCustomPrompt,
  
@@ -52,10 +52,10 @@ index 6fde0759d..f3b1aaf24 100644
      SubmitUserMessageWithMode {
          text: String,
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
-index 2e3127891..60b939e9a 100644
+index 4e5170fb6..872a9cd10 100644
 --- a/codex-rs/tui/src/chatwidget.rs
 +++ b/codex-rs/tui/src/chatwidget.rs
-@@ -1724,1 +1724,13 @@ impl ChatWidget {
+@@ -1750,1 +1750,13 @@ impl ChatWidget {
 +    /// Replace the composer content with the provided text and reset cursor.
 +    pub(crate) fn set_composer_text(
 +        &mut self,
@@ -70,7 +70,7 @@ index 2e3127891..60b939e9a 100644
 +
      pub(crate) fn set_remote_image_urls(&mut self, remote_image_urls: Vec<String>) {
 diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
-index fafe2e079..3e5e2f107 100644
+index 0c96c342e..2167e8d31 100644
 --- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
 +++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
 @@ -14,6 +14,7 @@ use crate::bottom_pane::slash_commands::SlashCommandItem;
@@ -142,7 +142,7 @@ index fafe2e079..3e5e2f107 100644
      fn emit_raw_output_mode_changed(&self, enabled: bool) {
          self.app_event_tx
              .send(AppEvent::RawOutputModeChanged { enabled });
-@@ -257,8 +312,12 @@ impl ChatWidget {
+@@ -258,8 +313,12 @@ impl ChatWidget {
                      .send(AppEvent::OpenDesktopThread { thread_id });
              }
              SlashCommand::Init => {
@@ -157,7 +157,7 @@ index fafe2e079..3e5e2f107 100644
              }
              SlashCommand::Compact => {
                  if self.blocks_direct_input {
-@@ -278,6 +337,9 @@ impl ChatWidget {
+@@ -279,6 +338,9 @@ impl ChatWidget {
                      self.defer_input_until_settings_applied();
                  }
              }
@@ -167,8 +167,8 @@ index fafe2e079..3e5e2f107 100644
              SlashCommand::Rename => {
                  self.session_telemetry
                      .counter("codex.thread.rename", /*inc*/ 1, &[]);
-@@ -1104,6 +1166,7 @@ impl ChatWidget {
-             | SlashCommand::TestApproval => QueueDrain::Continue,
+@@ -1126,6 +1188,7 @@ impl ChatWidget {
+             },
              SlashCommand::Feedback
              | SlashCommand::Export
 +            | SlashCommand::Prompt
@@ -193,7 +193,7 @@ index 000000000..7ed5d3613
 +
 +  Press enter to confirm or esc to go back
 diff --git a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
-index bb6250580..6672f44a2 100644
+index 2997c0a24..18000a644 100644
 --- a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
 +++ b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
 @@ -649,6 +649,28 @@ async fn slash_init_does_not_depend_on_loaded_instruction_sources() {
@@ -297,13 +297,13 @@ index b81f4bf4d..66b50d4d3 100644
  }
  
 diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
-index f8a973472..fbc8b391c 100644
+index 0e0041365..309710c2b 100644
 --- a/codex-rs/tui/src/lib.rs
 +++ b/codex-rs/tui/src/lib.rs
-@@ -160,6 +160,7 @@ pub(crate) mod onboarding;
+@@ -160,6 +160,7 @@ mod npm_registry;
+ pub(crate) mod onboarding;
  mod oss_selection;
  mod pager_overlay;
- mod permission_compat;
 +mod prompt_files;
  pub(crate) mod public_widgets;
  mod render;
@@ -574,7 +574,7 @@ index 000000000..5aaf005ca
 +    }
 +}
 diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
-index b36987034..bc8eca40b 100644
+index cbfd82085..0a7a8ef01 100644
 --- a/codex-rs/tui/src/slash_command.rs
 +++ b/codex-rs/tui/src/slash_command.rs
 @@ -29,6 +29,7 @@ pub enum SlashCommand {
@@ -585,7 +585,7 @@ index b36987034..bc8eca40b 100644
      Rename,
      New,
      Archive,
-@@ -88,6 +89,7 @@ impl SlashCommand {
+@@ -91,6 +92,7 @@ impl SlashCommand {
              SlashCommand::Init => "create an AGENTS.md file with instructions for Codex",
              SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
              SlashCommand::Review => "review my current changes and find issues",
@@ -593,15 +593,15 @@ index b36987034..bc8eca40b 100644
              SlashCommand::Rename => "rename the current thread",
              SlashCommand::Resume => "resume a saved chat",
              SlashCommand::Archive => "archive this session and exit",
-@@ -187,6 +189,7 @@ impl SlashCommand {
-                 | SlashCommand::Mention
+@@ -197,6 +199,7 @@ impl SlashCommand {
                  | SlashCommand::Status
+                 | SlashCommand::Pwd
                  | SlashCommand::Usage
 +                | SlashCommand::Prompt
                  | SlashCommand::Ide
          )
      }
-@@ -222,6 +225,7 @@ impl SlashCommand {
+@@ -233,6 +236,7 @@ impl SlashCommand {
              | SlashCommand::Copy
              | SlashCommand::Raw
              | SlashCommand::Rename
