@@ -115,8 +115,11 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_make_compilation_backend_routing(self) -> None:
         environment = os.environ.copy()
         environment.pop("COMP", None)
+        environment.pop("RELEASE_CARGO_CODEGEN_UNITS", None)
+        environment.pop("RELEASE_CARGO_DEBUG", None)
         environment.pop("RELEASE_CARGO_JOBS", None)
         environment.pop("RELEASE_CARGO_LTO", None)
+        environment.pop("RELEASE_CARGO_OPT_LEVEL", None)
         environment.pop("RELEASE_RUSTC_THREADS", None)
         cases = (
             (None, "both", True, True),
@@ -162,7 +165,19 @@ class ReleaseToolsTest(unittest.TestCase):
                     has_cargo,
                 )
                 self.assertEqual(
-                    '--cargo-lto "off"' in output,
+                    '--cargo-lto "thin"' in output,
+                    has_cargo,
+                )
+                self.assertEqual(
+                    '--cargo-opt-level "3"' in output,
+                    has_cargo,
+                )
+                self.assertEqual(
+                    '--cargo-debug "none"' in output,
+                    has_cargo,
+                )
+                self.assertEqual(
+                    '--cargo-codegen-units "4"' in output,
                     has_cargo,
                 )
                 self.assertIn("codex.tar.gz", output)
@@ -226,7 +241,7 @@ class ReleaseToolsTest(unittest.TestCase):
 
         self.assertIn('--cargo-jobs "2"', override_result.stdout)
 
-    def test_make_cargo_lto_defaults_off_and_can_be_overridden(self) -> None:
+    def test_make_cargo_profile_defaults_and_can_be_overridden(self) -> None:
         default_result = subprocess.run(
             [
                 "make",
@@ -242,7 +257,10 @@ class ReleaseToolsTest(unittest.TestCase):
             text=True,
         )
 
-        self.assertIn('--cargo-lto "off"', default_result.stdout)
+        self.assertIn('--cargo-lto "thin"', default_result.stdout)
+        self.assertIn('--cargo-opt-level "3"', default_result.stdout)
+        self.assertIn('--cargo-debug "none"', default_result.stdout)
+        self.assertIn('--cargo-codegen-units "4"', default_result.stdout)
 
         override_result = subprocess.run(
             [
@@ -252,7 +270,10 @@ class ReleaseToolsTest(unittest.TestCase):
                 "build",
                 "COMP=cargo",
                 "VERSION=0.147.0",
-                "RELEASE_CARGO_LTO=thin",
+                "RELEASE_CARGO_LTO=fat",
+                "RELEASE_CARGO_OPT_LEVEL=2",
+                "RELEASE_CARGO_DEBUG=line-tables-only",
+                "RELEASE_CARGO_CODEGEN_UNITS=1",
             ],
             cwd=ROOT,
             check=True,
@@ -260,7 +281,10 @@ class ReleaseToolsTest(unittest.TestCase):
             text=True,
         )
 
-        self.assertIn('--cargo-lto "thin"', override_result.stdout)
+        self.assertIn('--cargo-lto "fat"', override_result.stdout)
+        self.assertIn('--cargo-opt-level "2"', override_result.stdout)
+        self.assertIn('--cargo-debug "line-tables-only"', override_result.stdout)
+        self.assertIn('--cargo-codegen-units "1"', override_result.stdout)
 
     def test_debian_copyright_lists_release_patch_series(self) -> None:
         patch_files, _, _ = release_contract.resolve_patch_series(

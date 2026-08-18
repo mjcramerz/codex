@@ -32,9 +32,13 @@ RELEASE_BAZEL_TARGET ?= //bazel/release:release-binaries
 RELEASE_JOBS ?=
 # Keep memory-heavy Cargo release rustc processes serialized by default.
 RELEASE_CARGO_JOBS ?= 1
-# Disable release LTO by default so the large codex-tui and codex-cli crates
-# stay within the memory budget of the manual release builder.
-RELEASE_CARGO_LTO ?= off
+# Preserve the performance-oriented upstream release profile explicitly while
+# bounding compiler concurrency separately with RELEASE_CARGO_JOBS and
+# RELEASE_RUSTC_THREADS.
+RELEASE_CARGO_LTO ?= thin
+RELEASE_CARGO_OPT_LEVEL ?= 3
+RELEASE_CARGO_DEBUG ?= none
+RELEASE_CARGO_CODEGEN_UNITS ?= 4
 RELEASE_RUSTC_THREADS ?= 1
 RELEASE_BASE_REF ?= mcr/main
 VERSION ?=
@@ -70,6 +74,15 @@ RELEASE_BUILD_ARGS += --cargo-jobs "$(RELEASE_CARGO_JOBS)"
 endif
 ifneq ($(strip $(RELEASE_CARGO_LTO)),)
 RELEASE_BUILD_ARGS += --cargo-lto "$(RELEASE_CARGO_LTO)"
+endif
+ifneq ($(strip $(RELEASE_CARGO_OPT_LEVEL)),)
+RELEASE_BUILD_ARGS += --cargo-opt-level "$(RELEASE_CARGO_OPT_LEVEL)"
+endif
+ifneq ($(strip $(RELEASE_CARGO_DEBUG)),)
+RELEASE_BUILD_ARGS += --cargo-debug "$(RELEASE_CARGO_DEBUG)"
+endif
+ifneq ($(strip $(RELEASE_CARGO_CODEGEN_UNITS)),)
+RELEASE_BUILD_ARGS += --cargo-codegen-units "$(RELEASE_CARGO_CODEGEN_UNITS)"
 endif
 ifneq ($(strip $(RELEASE_RUSTC_THREADS)),)
 RELEASE_BUILD_ARGS += --rustc-threads "$(RELEASE_RUSTC_THREADS)"

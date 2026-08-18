@@ -18,7 +18,10 @@ DEFAULT_RUST_CHANNEL="nightly"
 DEFAULT_TARGET_CPU="skylake"
 DEFAULT_BAZEL_TARGET="//bazel/release:release-binaries"
 DEFAULT_BUILD_JOBS="1"
-DEFAULT_CARGO_LTO="off"
+DEFAULT_CARGO_LTO="thin"
+DEFAULT_CARGO_OPT_LEVEL="3"
+DEFAULT_CARGO_DEBUG="none"
+DEFAULT_CARGO_CODEGEN_UNITS="4"
 DEFAULT_RUSTC_THREADS="1"
 DEFAULT_COMP="both"
 BAZEL_COMPILATION_MODE="opt"
@@ -57,7 +60,12 @@ Options:
   --cargo-jobs N       Limit Cargo jobs independently from Bazel jobs.
                        Defaults to --jobs when omitted.
   --cargo-lto MODE     Cargo release-profile LTO mode: off, false, thin,
-                       fat, or true. Default: off to bound peak memory.
+                       fat, or true. Default: thin.
+  --cargo-opt-level N  Cargo release-profile optimization level: 0, 1, 2, 3,
+                       s, or z. Default: 3.
+  --cargo-debug MODE   Cargo release-profile debug info level. Default: none.
+  --cargo-codegen-units N
+                       Cargo release-profile codegen units. Default: 4.
   -h, --help           Show this help text.
 
 This script is intended for manual x86_64 GNU/Linux release builds only.
@@ -769,6 +777,15 @@ manifest = {
     "cargo_profile_lto": (
         optional_env("CARGO_PROFILE_RELEASE_LTO") if run_cargo else None
     ),
+    "cargo_profile_opt_level": (
+        optional_env("CARGO_PROFILE_RELEASE_OPT_LEVEL") if run_cargo else None
+    ),
+    "cargo_profile_debug": (
+        optional_env("CARGO_PROFILE_RELEASE_DEBUG") if run_cargo else None
+    ),
+    "cargo_profile_codegen_units": (
+        optional_env("CARGO_PROFILE_RELEASE_CODEGEN_UNITS") if run_cargo else None
+    ),
     "cargo_target_dir": optional_env("CARGO_TARGET_DIR") if run_cargo else None,
     "target_cpu": os.environ.get("RUST_TARGET_CPU"),
     "rustc_threads": optional_env("RUSTC_THREADS") if run_cargo else None,
@@ -888,6 +905,9 @@ BASE_REF=""
 BUILD_JOBS="${DEFAULT_BUILD_JOBS}"
 CARGO_JOBS=""
 CARGO_LTO="${RELEASE_CARGO_LTO:-${DEFAULT_CARGO_LTO}}"
+CARGO_OPT_LEVEL="${RELEASE_CARGO_OPT_LEVEL:-${DEFAULT_CARGO_OPT_LEVEL}}"
+CARGO_DEBUG="${RELEASE_CARGO_DEBUG:-${DEFAULT_CARGO_DEBUG}}"
+CARGO_CODEGEN_UNITS="${RELEASE_CARGO_CODEGEN_UNITS:-${DEFAULT_CARGO_CODEGEN_UNITS}}"
 WORKSPACE_VERSION_OVERRIDE=""
 COMP="${DEFAULT_COMP}"
 RUN_BAZEL="false"
@@ -963,6 +983,21 @@ while [ $# -gt 0 ]; do
     --cargo-lto)
       [ $# -ge 2 ] || die "--cargo-lto requires a value"
       CARGO_LTO="$2"
+      shift 2
+      ;;
+    --cargo-opt-level)
+      [ $# -ge 2 ] || die "--cargo-opt-level requires a value"
+      CARGO_OPT_LEVEL="$2"
+      shift 2
+      ;;
+    --cargo-debug)
+      [ $# -ge 2 ] || die "--cargo-debug requires a value"
+      CARGO_DEBUG="$2"
+      shift 2
+      ;;
+    --cargo-codegen-units)
+      [ $# -ge 2 ] || die "--cargo-codegen-units requires a value"
+      CARGO_CODEGEN_UNITS="$2"
       shift 2
       ;;
     -h|--help)
@@ -1049,6 +1084,21 @@ case "${CARGO_LTO}" in
     die "--cargo-lto must be one of: off, false, thin, fat, true (got: ${CARGO_LTO})"
     ;;
 esac
+case "${CARGO_OPT_LEVEL}" in
+  0|1|2|3|s|z) ;;
+  *)
+    die "--cargo-opt-level must be one of: 0, 1, 2, 3, s, z (got: ${CARGO_OPT_LEVEL})"
+    ;;
+esac
+case "${CARGO_DEBUG}" in
+  0|1|2|false|true|none|limited|full|line-tables-only|line-directives-only) ;;
+  *)
+    die "--cargo-debug has an unsupported value: ${CARGO_DEBUG}"
+    ;;
+esac
+if ! [[ "${CARGO_CODEGEN_UNITS}" =~ ^[1-9][0-9]*$ ]]; then
+  die "--cargo-codegen-units must be a positive integer"
+fi
 validate_target_cpu "${RUST_TARGET_CPU}"
 if [ "${RUN_BAZEL}" = "true" ]; then
   case "${BAZEL_TARGET}" in
@@ -1084,6 +1134,9 @@ if [ "${RUN_CARGO}" = "true" ]; then
   export CARGO_TARGET_DIR="${CACHE_ROOT}/target"
   export CARGO_NET_GIT_FETCH_WITH_CLI=true
   export CARGO_PROFILE_RELEASE_LTO="${CARGO_LTO}"
+  export CARGO_PROFILE_RELEASE_OPT_LEVEL="${CARGO_OPT_LEVEL}"
+  export CARGO_PROFILE_RELEASE_DEBUG="${CARGO_DEBUG}"
+  export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="${CARGO_CODEGEN_UNITS}"
   unset RUSTUP_TOOLCHAIN
 
   TOOLCHAIN_FILE="${REPO_ROOT}/codex-rs/rust-toolchain.toml"
@@ -1096,7 +1149,7 @@ if [ "${RUN_CARGO}" = "true" ]; then
   )"
   export RUST_TARGET_FEATURES
   configure_build_rustflags "${RUST_CHANNEL}" "${RUST_TARGET_CPU}" "${RUSTC_THREADS}"
-  info "Using Cargo release profile override: lto=${CARGO_PROFILE_RELEASE_LTO}"
+  info "Using Cargo release profile overrides: opt-level=${CARGO_PROFILE_RELEASE_OPT_LEVEL}, debug=${CARGO_PROFILE_RELEASE_DEBUG}, codegen-units=${CARGO_PROFILE_RELEASE_CODEGEN_UNITS}, lto=${CARGO_PROFILE_RELEASE_LTO}"
 fi
 
 if [ "${RUN_BAZEL}" = "true" ]; then

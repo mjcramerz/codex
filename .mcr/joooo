@@ -1,0 +1,22 @@
+[mcramer] [LPL-697] [~] > sudo dmesg -T | grep -Ei 'oom'
+[Tue Aug 18 17:25:12 2026] opt cgu.0 invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=200
+[Tue Aug 18 17:25:12 2026]  oom_kill_process+0x18f/0x1f0
+[Tue Aug 18 17:25:12 2026] [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+[Tue Aug 18 17:25:12 2026] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/user@1000.service/app.slice/crystal-dock.service,task=rustc,pid=669323,uid=1000
+[Tue Aug 18 17:25:12 2026] Out of memory: Killed process 669323 (rustc) total-vm:16651168kB, anon-rss:2695748kB, file-rss:297960kB, shmem-rss:0kB, UID:1000 pgtables:22252kB oom_score_adj:200
+[Tue Aug 18 19:05:08 2026] opt cgu.0 invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=200
+[Tue Aug 18 19:05:08 2026]  oom_kill_process+0x18f/0x1f0
+[Tue Aug 18 19:05:08 2026] [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+[Tue Aug 18 19:05:08 2026] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/user@1000.service/app.slice/crystal-dock.service,task=rustc,pid=741296,uid=1000
+[Tue Aug 18 19:05:08 2026] Out of memory: Killed process 741296 (rustc) total-vm:8428556kB, anon-rss:1768696kB, file-rss:106428kB, shmem-rss:0kB, UID:1000 pgtables:13664kB oom_score_adj:200
+[Tue Aug 18 20:14:53 2026] ThreadPoolSingl invoked oom-killer: gfp_mask=0x2cc0(GFP_KERNEL|__GFP_NOWARN), order=0, oom_score_adj=200
+[Tue Aug 18 20:14:53 2026]  oom_kill_process+0x18f/0x1f0
+[Tue Aug 18 20:14:53 2026] [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+[Tue Aug 18 20:14:53 2026] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/user@1000.service/app.slice/crystal-dock.service,task=rustc,pid=765290,uid=1000
+[Tue Aug 18 20:14:53 2026] Out of memory: Killed process 765290 (rustc) total-vm:12723724kB, anon-rss:2708084kB, file-rss:191788kB, shmem-rss:0kB, UID:1000 pgtables:20932kB oom_score_adj:200
+[Tue Aug 18 21:50:35 2026] waybar invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=200
+[Tue Aug 18 21:50:35 2026]  oom_kill_process+0x18f/0x1f0
+[Tue Aug 18 21:50:35 2026] [  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+[Tue Aug 18 21:50:35 2026] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=user.slice,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/user@1000.service/app.slice/crystal-dock.service,task=rustc,pid=826522,uid=1000
+[Tue Aug 18 21:50:35 2026] Out of memory: Killed process 826522 (rustc) total-vm:12723792kB, anon-rss:2803472kB, file-rss:304668kB, shmem-rss:0kB, UID:1000 pgtables:20804kB oom_score_adj:200
+[Tue Aug 18 21:50:37 2026] oom_reaper: reaped process 826522 (rustc), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
